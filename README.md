@@ -21,36 +21,40 @@ Qubes OS 透明代理网关，基于 sing-box，支持 vmess/ss/trojan/vless 协
 
 ## 快速开始
 
-### 1. 创建 NetVM
-
-在 dom0 中创建一个 AppVM 作为代理网关：
+### 1. 创建 NetVM（在 dom0 中执行）
 
 ```bash
-# 创建 AppVM
+# 创建一个新的 AppVM 作为代理网关
 qvm-create --class AppVM --template debian-12 sys-proxy
 qvm-prefs sys-proxy netvm sys-firewall
 qvm-prefs sys-proxy provides_network True
 
 # 或者使用已有的 AppVM
-qvm-prefs your-vm provides_network True
+qvm-prefs your-existing-vm provides_network True
 ```
 
 ### 2. 部署到 NetVM
 
-在 dom0 中执行：
+**方法一：复制项目文件**
 
+在 dom0 中：
 ```bash
-# 复制项目到 NetVM
 qvm-copy-to-vm sys-proxy /path/to/qubes-proxy-gateway
-
-# 或者直接在 NetVM 中克隆（如果能访问 GitHub）
-qvm-run --pass-io sys-proxy 'cd /home/user && git clone https://github.com/your-user/qubes-proxy-gateway.git'
 ```
 
-在 NetVM 中执行：
-
+在 sys-proxy 中：
 ```bash
-cd /home/user/qubes-proxy-gateway
+cd ~/QubesIncoming/dom0/qubes-proxy-gateway
+sudo bash install.sh
+```
+
+**方法二：在 NetVM 中克隆**
+
+在 sys-proxy 中（需要先能上网）：
+```bash
+cd /home/user
+git clone https://github.com/your-username/qubes-proxy-gateway.git
+cd qubes-proxy-gateway
 sudo bash install.sh
 ```
 
@@ -64,12 +68,15 @@ singctl
 
 选择 `订阅管理` → `添加订阅`，输入你的订阅 URL。
 
-### 4. 设置 AppVM 使用代理网关
-
-在 dom0 中，将需要翻墙的 AppVM 的 NetVM 设置为 sys-proxy：
+### 4. 设置 AppVM 使用代理网关（在 dom0 中执行）
 
 ```bash
+# 设置某个 AppVM 使用代理网关
 qvm-prefs your-app-vm netvm sys-proxy
+
+# 批量设置多个 AppVM
+qvm-prefs work netvm sys-proxy
+qvm-prefs personal netvm sys-proxy
 ```
 
 ### 5. 测试连通性
@@ -77,7 +84,11 @@ qvm-prefs your-app-vm netvm sys-proxy
 在 AppVM 中测试：
 
 ```bash
+# 测试国外站点
 curl -s https://www.google.com
+curl -s https://github.com
+
+# 查看出口 IP
 curl -s https://api.ipify.org
 ```
 
@@ -114,7 +125,7 @@ singctl
 singctl → 订阅管理 → 更新全部
 
 # 或者命令行更新
-sudo update-singbox-config
+update-singbox-config
 ```
 
 ## 项目结构
@@ -125,19 +136,15 @@ qubes-proxy-gateway/
 ├── uninstall.sh            # 卸载脚本
 ├── README.md               # 本文档
 ├── scripts/
-│   ├── setup-netvm.sh      # NetVM 初始化脚本
-│   ├── update-config.sh    # 更新配置脚本
+│   ├── setup-netvm.sh      # NetVM 网络配置（安装时自动调用）
 │   └── test-connectivity.sh # 连通性测试脚本
-├── config/
-│   ├── sing-box.service    # systemd 服务文件
-│   └── nftables.rules      # nftables 规则
 └── singctl/
     ├── __init__.py
     ├── __main__.py
     ├── config.py
     ├── data.py
-    ├── proxy.py
     ├── nodes.py
+    ├── proxy.py
     ├── subs.py
     └── ui.py
 ```
@@ -160,6 +167,7 @@ AppVM → NetVM (sys-proxy) → nftables mark → policy routing → TUN → sin
 
 ### sing-box 无法启动
 
+在 NetVM 中：
 ```bash
 # 查看日志
 sudo journalctl -u sing-box -f
@@ -170,8 +178,9 @@ sudo sing-box check -c /rw/config/sing-box/config.json
 
 ### AppVM 无法上网
 
+在 NetVM 中：
 ```bash
-# 检查 NetVM 是否运行
+# 检查 sing-box 是否运行
 systemctl is-active sing-box
 
 # 检查 nftables 规则
@@ -183,6 +192,7 @@ cat /proc/sys/net/ipv4/ip_forward
 
 ### DNS 解析失败
 
+在 AppVM 中：
 ```bash
 # 检查 DNS 配置
 cat /etc/resolv.conf
