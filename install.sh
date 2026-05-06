@@ -43,28 +43,64 @@ pip3 install simple-term-menu pyyaml
 # Step 2: Install sing-box
 info "[2/6] 安装 sing-box..."
 if ! command -v sing-box &> /dev/null; then
-    # Download latest sing-box
-    ARCH=$(uname -m)
-    case $ARCH in
-        x86_64) ARCH="amd64" ;;
-        aarch64) ARCH="arm64" ;;
-        armv7l) ARCH="armv7" ;;
-    esac
-    
-    VERSION=$(curl -s https://api.github.com/repos/SagerNet/sing-box/releases/latest | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/')
-    DOWNLOAD_URL="https://github.com/SagerNet/sing-box/releases/download/v${VERSION}/sing-box-${VERSION}-linux-${ARCH}.tar.gz"
-    
-    info "下载 sing-box v${VERSION}..."
-    cd /tmp
-    curl -sL "$DOWNLOAD_URL" -o sing-box.tar.gz
-    tar xzf sing-box.tar.gz
-    mv sing-box-*/sing-box /usr/local/bin/
-    chmod +x /usr/local/bin/sing-box
-    rm -rf sing-box-*
-    
-    info "sing-box 安装完成"
+    # Check for local binary first
+    LOCAL_BIN=""
+    if [ -f "$SCRIPT_DIR/sing-box" ]; then
+        LOCAL_BIN="$SCRIPT_DIR/sing-box"
+    elif [ -f "/tmp/sing-box" ]; then
+        LOCAL_BIN="/tmp/sing-box"
+    fi
+
+    if [ -n "$LOCAL_BIN" ]; then
+        info "使用本地二进制: $LOCAL_BIN"
+        cp "$LOCAL_BIN" /usr/local/bin/sing-box
+        chmod +x /usr/local/bin/sing-box
+    else
+        # Try downloading from GitHub
+        ARCH=$(uname -m)
+        case $ARCH in
+            x86_64) ARCH="amd64" ;;
+            aarch64) ARCH="arm64" ;;
+            armv7l) ARCH="armv7" ;;
+        esac
+
+        VERSION=$(curl -s --connect-timeout 10 https://api.github.com/repos/SagerNet/sing-box/releases/latest | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/')
+        if [ -n "$VERSION" ]; then
+            DOWNLOAD_URL="https://github.com/SagerNet/sing-box/releases/download/v${VERSION}/sing-box-${VERSION}-linux-${ARCH}.tar.gz"
+            info "下载 sing-box v${VERSION}..."
+            cd /tmp
+            if curl -fL --connect-timeout 15 "$DOWNLOAD_URL" -o sing-box.tar.gz 2>/dev/null; then
+                tar xzf sing-box.tar.gz
+                mv sing-box-*/sing-box /usr/local/bin/
+                chmod +x /usr/local/bin/sing-box
+                rm -rf sing-box-* sing-box.tar.gz
+            else
+                error "下载失败。请手动安装 sing-box："
+                echo ""
+                echo "  方法一: 将 sing-box 二进制放到项目目录下，重新运行 install.sh"
+                echo "    cp /path/to/sing-box $SCRIPT_DIR/"
+                echo "    sudo bash install.sh"
+                echo ""
+                echo "  方法二: 手动下载并放到指定位置"
+                echo "    从 https://github.com/SagerNet/sing-box/releases 下载"
+                echo "    cp sing-box /usr/local/bin/sing-box"
+                echo "    chmod +x /usr/local/bin/sing-box"
+                echo "    然后重新运行 sudo bash install.sh"
+                exit 1
+            fi
+        else
+            error "无法获取 sing-box 版本信息。请手动安装："
+            echo ""
+            echo "  从 https://github.com/SagerNet/sing-box/releases 下载二进制"
+            echo "  放到 $SCRIPT_DIR/sing-box 或 /tmp/sing-box"
+            echo "  然后重新运行 sudo bash install.sh"
+            exit 1
+        fi
+    fi
+
+    info "sing-box 安装完成: $(sing-box version | head -1)"
 else
-    info "sing-box 已安装: $(sing-box version)"
+    info "sing-box 已安装: $(sing-box version | head -1)"
 fi
 
 # Step 3: Create config directory

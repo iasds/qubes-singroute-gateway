@@ -43,3 +43,7 @@ cover/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# sing-box binary (download locally, don't commit)
+sing-box
+sing-box-*.tar.gz
