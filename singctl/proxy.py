@@ -274,8 +274,9 @@ def apply_mode(config, mode, node_tag=None, rule_preset=None, rules_data=None):
     """Apply a proxy mode to the config and restart sing-box.
     
     Custom rules are automatically appended to the preset rules.
+    Remote rule sets are automatically synced to route.rule_set.
     """
-    from .config import RULE_PRESETS
+    from .config import RULE_PRESETS, RULE_SETS
 
     if mode == "direct":
         set_route_final(config, "direct")
@@ -319,16 +320,44 @@ def apply_mode(config, mode, node_tag=None, rule_preset=None, rules_data=None):
                 selector["outbounds"] = obs
                 selector["default"] = node_tag
 
-    save_config(config)
-
     # Ensure route.default_domain_resolver exists (sing-box 1.13+ requirement)
     if "route" not in config:
         config["route"] = {}
     if "default_domain_resolver" not in config["route"]:
         config["route"]["default_domain_resolver"] = {"server": "dns-system", "strategy": "prefer_ipv4"}
 
+    # Sync remote rule_sets referenced in rules to route.rule_set
+    _sync_rule_sets(config)
+
+    save_config(config)
     restart()
     return config
+
+
+def _sync_rule_sets(config):
+    """Ensure all rule_set tags referenced in route.rules exist in route.rule_set."""
+    from .config import RULE_SETS
+
+    if "route" not in config:
+        config["route"] = {}
+
+    # Collect all rule_set tags used in rules
+    used_tags = set()
+    for rule in config.get("route", {}).get("rules", []):
+        tag = rule.get("rule_set")
+        if tag:
+            used_tags.add(tag)
+
+    # Ensure route.rule_set list exists
+    if "rule_set" not in config["route"]:
+        config["route"]["rule_set"] = []
+
+    existing_tags = {rs.get("tag") for rs in config["route"]["rule_set"]}
+
+    # Add missing rule sets
+    for tag in used_tags:
+        if tag not in existing_tags and tag in RULE_SETS:
+            config["route"]["rule_set"].append(RULE_SETS[tag])
 
 
 def get_current_dns(config):

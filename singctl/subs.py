@@ -265,6 +265,10 @@ def sync_nodes_to_config():
     if "default_domain_resolver" not in config["route"]:
         config["route"]["default_domain_resolver"] = {"server": "dns-system", "strategy": "prefer_ipv4"}
 
+    # Sync rule_sets (reuse proxy module's logic)
+    from .proxy import _sync_rule_sets
+    _sync_rule_sets(config)
+
     # Update urltest outbound
     for o in config["outbounds"]:
         if o.get("type") == "urltest":
