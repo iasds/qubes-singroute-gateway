@@ -3,7 +3,7 @@ import sys
 import time
 from simple_term_menu import TerminalMenu
 from .config import (
-    RULE_PRESETS, BOX_W,
+    RULE_PRESETS, DNS_PRESETS, BOX_W,
     C_RESET, C_BOLD, C_DIM, C_GREEN, C_RED, C_CYAN, C_WHITE
 )
 from .data import (
@@ -13,7 +13,7 @@ from .data import (
 from .proxy import (
     is_running, get_uptime_seconds, get_exit_ip, restart,
     detect_current_mode, apply_mode, clear_proxy_nodes,
-    find_selector_outbound
+    find_selector_outbound, get_current_dns, apply_dns_preset
 )
 from .nodes import (
     parse_nodes, speedtest_all, format_node_line, sort_nodes, group_by_sub
@@ -454,40 +454,78 @@ def show_settings(prefs):
         clear()
         header("设置")
         print()
+        # Show current DNS
+        config = load_config()
+        current_dns = get_current_dns(config)
+        dns_name = DNS_PRESETS.get(current_dns, {}).get("name", "未知") if current_dns else "未知"
+        info("DNS", dns_name)
         info("更新间隔", f"{prefs.get('update_interval_hours', 6)} 小时")
         info("测速URL", prefs.get("speedtest_url", "默认"))
         info("延迟容差", f"{prefs.get('tolerance_ms', 50)} ms")
 
         idx = make_menu([
+            "DNS 设置",
             "修改更新间隔",
             "修改测速URL",
             "修改延迟容差",
             "← 返回",
         ])
 
-        if idx is None or idx == 3:
+        if idx is None or idx == 4:
             return
         elif idx == 0:
+            show_dns_menu(config)
+        elif idx == 1:
             val = input(f"\n  更新间隔 (小时): ").strip()
             if val.isdigit() and int(val) > 0:
                 prefs["update_interval_hours"] = int(val)
                 save_preferences(prefs)
                 print(f"  {C_GREEN}✓{C_RESET}")
             pause()
-        elif idx == 1:
+        elif idx == 2:
             val = input(f"\n  测速URL: ").strip()
             if val:
                 prefs["speedtest_url"] = val
                 save_preferences(prefs)
                 print(f"  {C_GREEN}✓{C_RESET}")
             pause()
-        elif idx == 2:
+        elif idx == 3:
             val = input(f"\n  延迟容差 (ms): ").strip()
             if val.isdigit():
                 prefs["tolerance_ms"] = int(val)
                 save_preferences(prefs)
                 print(f"  {C_GREEN}✓{C_RESET}")
             pause()
+
+
+def show_dns_menu(config):
+    """DNS provider selection menu"""
+    clear()
+    header("DNS 设置")
+
+    current = get_current_dns(config)
+    current_name = DNS_PRESETS.get(current, {}).get("name", "未知") if current else "未知"
+    print()
+    info("当前 DNS", current_name)
+    print()
+
+    options = []
+    keys = []
+    for key, preset in DNS_PRESETS.items():
+        marker = " ✓" if key == current else ""
+        options.append(f"{preset['name']}{marker}  — {preset['desc']}")
+        keys.append(key)
+    options.append("← 返回")
+
+    idx = make_menu(options, title="  选择 DNS:")
+    if idx is None or idx == len(keys):
+        return
+
+    selected_key = keys[idx]
+    print(f"\n  {C_DIM}切换中...{C_RESET}")
+    apply_dns_preset(config, selected_key)
+    print(f"  {C_GREEN}✓{C_RESET} 已切换到 {DNS_PRESETS[selected_key]['name']}")
+    pause()
 
 
 # ─── Entry Point ─────────────────────────────────────────

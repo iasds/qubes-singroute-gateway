@@ -251,3 +251,57 @@ def clear_proxy_nodes(config):
     save_config(config)
     restart()
     return config
+
+
+def get_current_dns(config):
+    """Detect current DNS preset from config"""
+    from .config import DNS_PRESETS
+    servers = config.get("dns", {}).get("servers", [])
+    # Find dns-proxy server address
+    proxy_addr = None
+    for s in servers:
+        if s.get("tag") == "dns-proxy":
+            proxy_addr = s.get("server", "")
+            break
+    if not proxy_addr:
+        return None
+    # Match against presets
+    for key, preset in DNS_PRESETS.items():
+        for ps in preset["servers"]:
+            if ps.get("tag") == "dns-proxy" and ps.get("server") == proxy_addr:
+                return key
+    return None
+
+
+def apply_dns_preset(config, preset_key):
+    """Apply a DNS preset to config and restart sing-box"""
+    from .config import DNS_PRESETS
+    if preset_key not in DNS_PRESETS:
+        raise ValueError(f"Unknown DNS preset: {preset_key}")
+    preset = DNS_PRESETS[preset_key]
+
+    # Ensure dns section exists
+    if "dns" not in config:
+        config["dns"] = {}
+    if "servers" not in config["dns"]:
+        config["dns"]["servers"] = []
+
+    # Keep system DNS (tag=dns-system), replace others
+    system_dns = [s for s in config["dns"]["servers"] if s.get("tag") == "dns-system"]
+    config["dns"]["servers"] = system_dns + preset["servers"]
+
+    # Ensure dns rules and defaults exist
+    if "rules" not in config["dns"]:
+        config["dns"]["rules"] = [
+            {"domain_suffix": [".cn", "baidu.com", "qq.com", "taobao.com",
+                               "bilibili.com", "doh.pub", "gfw250.com", "iepl",
+                               "mojcn.com", "cnmjin.net"], "server": "dns-system"}
+        ]
+    if "strategy" not in config["dns"]:
+        config["dns"]["strategy"] = "prefer_ipv4"
+    if "independent_cache" not in config["dns"]:
+        config["dns"]["independent_cache"] = True
+
+    save_config(config)
+    restart()
+    return config

@@ -131,3 +131,48 @@ RULE_PRESETS = {
         ]
     }
 }
+
+# DNS presets — foreign DNS detour: "auto" (via proxy), CN DNS detour: "direct"
+# Qubes system DNS (10.139.1.1) always included for CN domains and proxy node resolution
+DNS_PRESETS = {
+    "google": {
+        "name": "Google DNS",
+        "desc": "经典选择，稳定可靠",
+        "servers": [
+            {"type": "https", "tag": "dns-proxy", "server": "8.8.8.8", "detour": "auto"},
+            {"type": "https", "tag": "dns-direct", "server": "119.29.29.29", "detour": "direct"},
+        ]
+    },
+    "cloudflare": {
+        "name": "Cloudflare DNS",
+        "desc": "注重隐私，无日志，速度快",
+        "servers": [
+            {"type": "https", "tag": "dns-proxy", "server": "1.1.1.1", "detour": "auto"},
+            {"type": "https", "tag": "dns-direct", "server": "119.29.29.29", "detour": "direct"},
+        ]
+    },
+    "quad9": {
+        "name": "Quad9 DNS",
+        "desc": "安全优先，自动拦截恶意域名",
+        "servers": [
+            {"type": "https", "tag": "dns-proxy", "server": "9.9.9.9", "detour": "auto"},
+            {"type": "https", "tag": "dns-direct", "server": "119.29.29.29", "detour": "direct"},
+        ]
+    },
+    "adguard": {
+        "name": "AdGuard DNS",
+        "desc": "隐私保护 + 广告拦截",
+        "servers": [
+            {"type": "https", "tag": "dns-proxy", "server": "94.140.14.14", "detour": "auto"},
+            {"type": "https", "tag": "dns-direct", "server": "119.29.29.29", "detour": "direct"},
+        ]
+    },
+    "mullvad": {
+        "name": "Mullvad DNS",
+        "desc": "严格无日志，瑞典隐私法保护",
+        "servers": [
+            {"type": "https", "tag": "dns-proxy", "server": "100.64.0.1", "detour": "auto"},
+            {"type": "https", "tag": "dns-direct", "server": "119.29.29.29", "detour": "direct"},
+        ]
+    },
+}
