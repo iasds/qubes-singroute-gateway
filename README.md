@@ -1,4 +1,4 @@
-# qubes-proxy-gateway
+# qubes-singroute-gateway
 
 Qubes OS 透明代理网关，基于 sing-box，支持 vmess/ss/trojan/vless 协议。
 
@@ -39,12 +39,12 @@ qvm-prefs your-existing-vm provides_network True
 
 在 dom0 中：
 ```bash
-qvm-copy-to-vm sys-proxy /path/to/qubes-proxy-gateway
+qvm-copy-to-vm sys-proxy /path/to/qubes-singroute-gateway
 ```
 
 在 sys-proxy 中：
 ```bash
-cd ~/QubesIncoming/dom0/qubes-proxy-gateway
+cd ~/QubesIncoming/dom0/qubes-singroute-gateway
 sudo bash install.sh
 ```
 
@@ -53,8 +53,8 @@ sudo bash install.sh
 在 sys-proxy 中（需要先能上网）：
 ```bash
 cd /home/user
-git clone https://github.com/your-username/qubes-proxy-gateway.git
-cd qubes-proxy-gateway
+git clone https://github.com/your-username/qubes-singroute-gateway.git
+cd qubes-singroute-gateway
 sudo bash install.sh
 ```
 
@@ -131,7 +131,7 @@ update-singbox-config
 ## 项目结构
 
 ```
-qubes-proxy-gateway/
+qubes-singroute-gateway/
 ├── install.sh              # 安装脚本
 ├── uninstall.sh            # 卸载脚本
 ├── README.md               # 本文档

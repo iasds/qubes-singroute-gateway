@@ -3,7 +3,7 @@
 #  Qubes Proxy Gateway — 一键安装/更新/卸载
 # ============================================================
 #  用法:
-#    bash <(curl -fsSL https://raw.githubusercontent.com/iasds/qubes-proxy-gateway/master/install.sh)
+#    bash <(curl -fsSL https://raw.githubusercontent.com/iasds/qubes-singroute-gateway/master/install.sh)
 #
 #  功能:
 #    - 首次运行: 全自动安装 sing-box + singctl + 网络配置
@@ -12,7 +12,7 @@
 # ============================================================
 set -e
 
-REPO="iasds/qubes-proxy-gateway"
+REPO="iasds/qubes-singroute-gateway"
 BRANCH="master"
 INSTALL_DIR="/usr/local/lib/singctl"
 BIN_DIR="/usr/local/bin"
@@ -432,7 +432,7 @@ do_update() {
 # ============================================================
 do_uninstall() {
     echo ""
-    echo -e "${YELLOW}${BOLD}⚠ 即将卸载 qubes-proxy-gateway${NC}"
+    echo -e "${YELLOW}${BOLD}⚠ 即将卸载 qubes-singroute-gateway${NC}"
     echo -e "${DIM}────────────────────────────────────────────────────${NC}"
     echo -e "  将执行以下操作:"
     echo -e "    - 停止并删除 sing-box 服务"

@@ -31,7 +31,7 @@ fi
 # Create rc.local for persistence
 cat > /rw/config/rc.local << 'RCLOCAL'
 #!/bin/bash
-# qubes-proxy-gateway startup script
+# qubes-singroute-gateway startup script
 
 # Enable IP forwarding
 echo 1 > /proc/sys/net/ipv4/ip_forward

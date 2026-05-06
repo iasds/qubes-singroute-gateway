@@ -1,5 +1,5 @@
 #!/bin/bash
-# qubes-proxy-gateway uninstaller
+# qubes-singroute-gateway uninstaller
 # Usage: sudo bash uninstall.sh
 set -e
 
@@ -14,7 +14,7 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 
-info "=== qubes-proxy-gateway 卸载 ==="
+info "=== qubes-singroute-gateway 卸载 ==="
 
 # Stop and disable services
 info "停止服务..."
@@ -50,7 +50,7 @@ ip rule del fwmark 0x1 table 2022 2>/dev/null || true
 # Remove rc.local entries (keep other entries)
 if [ -f /rw/config/rc.local ]; then
     info "清理 rc.local..."
-    sed -i '/qubes-proxy-gateway/,/^RCLOCAL$/d' /rw/config/rc.local 2>/dev/null || true
+    sed -i '/qubes-singroute-gateway/,/^RCLOCAL$/d' /rw/config/rc.local 2>/dev/null || true
 fi
 
 echo ""
