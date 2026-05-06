@@ -181,14 +181,19 @@ def show_mode_menu(config, prefs):
         info(t("tui_current"), current)
         print()
 
-        idx = make_menu([
-            t("mode_smart_split_desc"),
-            t("mode_all_proxy_desc"),
-            t("mode_bypass_desc"),
-            t("mode_global_desc"),
-            t("mode_direct_desc"),
-            t("tui_back"),
-        ])
+        mode_items = [
+            ("mode_smart_split", "mode_smart_split_desc", "mode_smart_split_hint"),
+            ("mode_all_proxy", "mode_all_proxy_desc", "mode_all_proxy_hint"),
+            ("mode_bypass", "mode_bypass_desc", "mode_bypass_hint"),
+        ]
+        options = []
+        for name_key, desc_key, hint_key in mode_items:
+            options.append(f"{t(name_key):10s}  {t(desc_key)}\n           {C_DIM}└ {t(hint_key)}{C_RESET}")
+        options.append(f"{t('mode_global'):10s}  {t('mode_global_desc')}\n           {C_DIM}└ {t('mode_global_hint')}{C_RESET}")
+        options.append(f"{t('mode_direct'):10s}  {t('mode_direct_desc')}\n           {C_DIM}└ {t('mode_direct_hint')}{C_RESET}")
+        options.append(t("tui_back"))
+
+        idx = make_menu(options)
 
         if idx is None or idx == 5:
             return
