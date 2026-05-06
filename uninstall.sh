@@ -16,14 +16,19 @@ fi
 
 info "=== qubes-proxy-gateway 卸载 ==="
 
-# Stop and disable service
+# Stop and disable services
 info "停止服务..."
-systemctl stop sing-box 2>/dev/null || true
-systemctl disable sing-box 2>/dev/null || true
+for svc in sing-box singbox-monitor update-subscriptions.timer update-subscriptions; do
+    systemctl stop "$svc" 2>/dev/null || true
+    systemctl disable "$svc" 2>/dev/null || true
+done
 
-# Remove service file
+# Remove service files
 info "删除服务文件..."
 rm -f /etc/systemd/system/sing-box.service
+rm -f /etc/systemd/system/singbox-monitor.service
+rm -f /etc/systemd/system/update-subscriptions.service
+rm -f /etc/systemd/system/update-subscriptions.timer
 systemctl daemon-reload
 
 # Remove binaries
@@ -31,6 +36,7 @@ info "删除程序文件..."
 rm -f /usr/local/bin/sing-box
 rm -f /usr/local/bin/singctl
 rm -f /usr/local/bin/update-singbox-config
+rm -f /usr/local/bin/auto-update-subscriptions
 rm -rf /usr/local/lib/singctl
 
 # Remove nftables rules
@@ -52,3 +58,7 @@ info "=== 卸载完成 ==="
 echo ""
 echo "配置文件保留在 /rw/config/sing-box/"
 echo "如需完全删除，执行: sudo rm -rf /rw/config/sing-box"
+echo ""
+echo "临时文件清理:"
+rm -f /tmp/singbox-monitor.pid /tmp/singbox-update.lock
+echo "  已清理 PID 和 lock 文件"
