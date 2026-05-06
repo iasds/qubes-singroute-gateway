@@ -24,6 +24,7 @@ from .subs import (
     add_subscription, remove_subscription, update_subscription,
     update_all_subscriptions
 )
+from .i18n import t, get_region_name
 
 
 def clear():
@@ -39,7 +40,9 @@ def info(label, value):
     print(f"  {C_DIM}{label}:{C_RESET} {value}")
 
 
-def make_menu(options, title="  选择:"):
+def make_menu(options, title=None):
+    if title is None:
+        title = f"  {t('tui_select')}"
     menu = TerminalMenu(
         options,
         title=title,
@@ -51,7 +54,7 @@ def make_menu(options, title="  选择:"):
 
 
 def pause():
-    input(f"\n  {C_DIM}按 Enter 继续...{C_RESET}")
+    input(f"\n  {C_DIM}{t('tui_press_enter')}{C_RESET}")
 
 
 # ─── Main Menu ───────────────────────────────────────────
@@ -64,7 +67,11 @@ def show_main():
 
         running = is_running()
         mode, node, preset = detect_current_mode(config)
-        mode_names = {"global": "全局", "rule": "规则", "direct": "直连"}
+        mode_names = {
+            "global": t("mode_global"),
+            "rule": t("mode_rule"),
+            "direct": t("mode_direct"),
+        }
         mode_str = mode_names.get(mode, mode)
         if preset:
             mode_str += f" ({RULE_PRESETS.get(preset, {}).get('name', preset)})"
@@ -93,29 +100,30 @@ def show_main():
         # Exit IP and uptime
         exit_ip = get_exit_ip() if running else "—"
         uptime = uptime_str(get_uptime_seconds()) if running else "—"
-        info("出口IP", exit_ip)
-        info("运行时间", uptime)
+        info(t("tui_exit_ip"), exit_ip)
+        info(t("status_uptime"), uptime)
 
         # Active node
         if active_node and running:
             # Quick latency check for the active node
             from .nodes import _resolve_and_test
             _, _, active_latency = _resolve_and_test(active_node, timeout=2)
-            lat_str = f"{active_latency}ms" if active_latency else "超时"
+            lat_str = f"{active_latency}ms" if active_latency else t("node_timeout")
             node_name = active_node["tag"].split("-", 2)[-1] if "-" in active_node["tag"] else active_node["tag"]
-            info("当前节点", f"{active_node.get('region', '🌐')} {node_name[:30]}  {lat_str}")
+            region = get_region_name(active_node.get("region", "unknown"))
+            info(t("tui_current_node"), f"{region} {node_name[:30]}  {lat_str}")
         elif mode == "global" and node:
             node_name = node.split("-", 2)[-1] if "-" in node else node
-            info("当前节点", node_name)
+            info(t("tui_current_node"), node_name)
 
         # DNS info
         current_dns = get_current_dns(config)
         dns_name = DNS_PRESETS.get(current_dns, {}).get("name", "?") if current_dns else "—"
-        info("DNS", dns_name)
+        info(t("tui_current_dns"), dns_name)
 
         # Node/sub summary
         online = sum(1 for n in nodes if n.get("online", True))
-        info("节点", f"{len(nodes)} 个  |  订阅 {sub_count}  |  更新 {time_ago(prefs.get('last_update'))}")
+        info(t("tui_nodes"), t("tui_nodes_summary", count=len(nodes), subs=sub_count, updated=time_ago(prefs.get('last_update'))))
 
         # Monitor status
         monitor_running = os.path.exists("/tmp/singbox-monitor.pid") and \
@@ -131,14 +139,14 @@ def show_main():
                 monitor_running = False
         else:
             monitor_str = f"{C_RED}○{C_RESET}"
-        info("健康监控", monitor_str)
+        info(t("status_monitor"), monitor_str)
 
         idx = make_menu([
-            "代理模式",
-            "节点管理",
-            "订阅管理",
-            "设置",
-            "退出",
+            t("menu_mode"),
+            t("menu_nodes"),
+            t("menu_subs"),
+            t("menu_settings"),
+            t("menu_exit"),
         ], title="")
 
         if idx is None or idx == 4:
@@ -160,43 +168,47 @@ def show_mode_menu(config, prefs):
     while True:
         clear()
         mode, node, preset = detect_current_mode(config)
-        mode_names = {"global": "全局", "rule": "规则", "direct": "直连"}
+        mode_names = {
+            "global": t("mode_global"),
+            "rule": t("mode_rule"),
+            "direct": t("mode_direct"),
+        }
         current = mode_names.get(mode, mode)
         if preset:
             current += f" ({RULE_PRESETS.get(preset, {}).get('name', preset)})"
 
-        header("代理模式")
-        info("当前", current)
+        header(t("menu_mode"))
+        info(t("tui_current"), current)
         print()
 
         idx = make_menu([
-            "智能分流  — 中国直连，国外代理",
-            "全部代理  — 所有流量走代理",
-            "仅代理受限 — 只代理受限站点",
-            "全局代理  — 指定节点转发全部",
-            "直连      — 不走代理",
-            "← 返回",
+            t("mode_smart_split_desc"),
+            t("mode_all_proxy_desc"),
+            t("mode_bypass_desc"),
+            t("mode_global_desc"),
+            t("mode_direct_desc"),
+            t("tui_back"),
         ])
 
         if idx is None or idx == 5:
             return
         elif idx == 0:
             _apply_and_save(config, prefs, "rule", rule_preset="smart-split")
-            print(f"\n  {C_GREEN}✓{C_RESET} 已切换到智能分流")
+            print(f"\n  {C_GREEN}✓{C_RESET} {t('mode_switched', mode=t('mode_smart_split'))}")
             pause()
         elif idx == 1:
             _apply_and_save(config, prefs, "rule", rule_preset="all-proxy")
-            print(f"\n  {C_GREEN}✓{C_RESET} 已切换到全部代理")
+            print(f"\n  {C_GREEN}✓{C_RESET} {t('mode_switched', mode=t('mode_all_proxy'))}")
             pause()
         elif idx == 2:
             _apply_and_save(config, prefs, "rule", rule_preset="bypass-cn")
-            print(f"\n  {C_GREEN}✓{C_RESET} 已切换到仅代理受限")
+            print(f"\n  {C_GREEN}✓{C_RESET} {t('mode_switched', mode=t('mode_bypass'))}")
             pause()
         elif idx == 3:
             show_global_node_select(config, prefs)
         elif idx == 4:
             _apply_and_save(config, prefs, "direct")
-            print(f"\n  {C_GREEN}✓{C_RESET} 已切换到直连")
+            print(f"\n  {C_GREEN}✓{C_RESET} {t('mode_switched', mode=t('mode_direct'))}")
             pause()
 
 
@@ -209,12 +221,12 @@ def _apply_and_save(config, prefs, mode, **kwargs):
 def show_global_node_select(config, prefs):
     """Select node for global mode: first pick sub, then pick node"""
     clear()
-    header("全局代理 — 选择节点")
-    print(f"\n  {C_DIM}正在测速...{C_RESET}")
+    header(f"{t('mode_global')} — {t('tui_select_node')}")
+    print(f"\n  {C_DIM}{t('node_testing')}{C_RESET}")
 
     nodes = parse_nodes(config)
     if not nodes:
-        print(f"\n  没有可用节点")
+        print(f"\n  {t('node_no_available')}")
         pause()
         return
 
@@ -223,32 +235,32 @@ def show_global_node_select(config, prefs):
 
     # Step 1: Select subscription
     clear()
-    header("全局代理 — 选择订阅")
+    header(f"{t('mode_global')} — {t('tui_select_sub')}")
     sub_names = []
     for source, ns in groups:
         online = sum(1 for n in ns if n["online"])
-        sub_names.append(f"{source}  ({online}/{len(ns)} 在线)")
-    sub_names.append("← 返回")
+        sub_names.append(f"{source}  ({online}/{len(ns)} {t('node_online')})")
+    sub_names.append(t("tui_back"))
 
-    idx = make_menu(sub_names, title="  选择订阅来源:")
+    idx = make_menu(sub_names, title=f"  {t('tui_select_sub_source')}")
     if idx is None or idx == len(groups):
         return
 
     # Step 2: Select node within subscription
     source, sub_nodes = groups[idx]
     clear()
-    header(f"全局代理 — {source}")
+    header(f"{t('mode_global')} — {source}")
 
     options = [format_node_line(n) for n in sub_nodes]
-    options.append("← 返回")
+    options.append(t("tui_back"))
 
-    idx = make_menu(options, title="  选择节点:")
+    idx = make_menu(options, title=f"  {t('tui_select_node')}")
     if idx is None or idx == len(sub_nodes):
         return
 
     node = sub_nodes[idx]
     _apply_and_save(config, prefs, "global", node_tag=node["tag"])
-    print(f"\n  {C_GREEN}✓{C_RESET} 已切换到: {node['tag']}")
+    print(f"\n  {C_GREEN}✓{C_RESET} {t('node_switched', name=node['tag'])}")
     pause()
 
 
@@ -257,22 +269,22 @@ def show_global_node_select(config, prefs):
 def show_nodes_menu(config):
     while True:
         clear()
-        header("节点管理")
+        header(t("menu_nodes"))
 
         nodes = parse_nodes(config)
         
         sel = find_selector_outbound(config)
         if sel:
             current = sel.get("default", sel.get("outbounds", [None])[0])
-            info("当前选中", current or "—")
-        info("节点数", str(len(nodes)))
+            info(t("tui_current_selected"), current or "—")
+        info(t("tui_node_count_label"), str(len(nodes)))
         print()
 
         idx = make_menu([
-            "查看全部节点",
-            "切换节点（按订阅）",
-            "清空全部节点",
-            "← 返回",
+            t("node_view_all"),
+            t("node_switch_by_sub"),
+            t("node_clear_all"),
+            t("tui_back"),
         ])
 
         if idx is None or idx == 3:
@@ -281,7 +293,7 @@ def show_nodes_menu(config):
             show_all_nodes(nodes)
         elif idx == 1:
             if not nodes:
-                print(f"\n  没有可用节点")
+                print(f"\n  {t('node_no_available')}")
                 pause()
             else:
                 show_node_selector_by_sub(config, nodes)
@@ -292,18 +304,18 @@ def show_nodes_menu(config):
 def show_all_nodes(nodes):
     """Show all nodes with speedtest"""
     clear()
-    header("全部节点")
-    print(f"\n  {C_DIM}正在测速...{C_RESET}")
+    header(t("node_all_title"))
+    print(f"\n  {C_DIM}{t('node_testing')}{C_RESET}")
 
     nodes = speedtest_all(nodes)
     groups = group_by_sub(nodes)
 
     clear()
-    header("全部节点")
+    header(t("node_all_title"))
 
     for source, ns in groups:
         online = sum(1 for n in ns if n["online"])
-        print(f"\n  {source} ({online}/{len(ns)} 在线)")
+        print(f"\n  {source} ({online}/{len(ns)} {t('node_online')})")
         print(f"  {'─' * (BOX_W - 6)}")
         for n in ns:
             print(format_node_line(n))
@@ -315,57 +327,57 @@ def show_clear_nodes(config):
     """Clear all proxy nodes"""
     nodes = parse_nodes(config)
     if not nodes:
-        print(f"\n  已经没有节点了")
+        print(f"\n  {t('node_already_empty')}")
         pause()
         return
     
     clear()
-    header("清空节点")
-    print(f"\n  当前有 {len(nodes)} 个节点")
-    print(f"  清空后需要重新添加订阅才能使用代理")
+    header(t("node_clear_title"))
+    print(f"\n  {t('node_clear_count', count=len(nodes))}")
+    print(f"  {t('node_clear_hint')}")
     
     idx = make_menu([
-        "确认清空",
-        "← 返回",
+        t("node_confirm_clear"),
+        t("tui_back"),
     ], title="")
     
     if idx == 0:
         clear_proxy_nodes(config)
-        print(f"\n  {C_GREEN}✓{C_RESET} 已清空全部节点")
+        print(f"\n  {C_GREEN}✓{C_RESET} {t('node_cleared')}")
         pause()
 
 
 def show_node_selector_by_sub(config, nodes):
     """Select node: first pick sub, then pick node"""
     clear()
-    header("切换节点")
-    print(f"\n  {C_DIM}正在测速...{C_RESET}")
+    header(t("node_switch_title"))
+    print(f"\n  {C_DIM}{t('node_testing')}{C_RESET}")
 
     nodes = speedtest_all(nodes)
     groups = group_by_sub(nodes)
 
     # Step 1: Select subscription
     clear()
-    header("切换节点 — 选择订阅")
+    header(f"{t('node_switch_title')} — {t('tui_select_sub')}")
     sub_names = []
     for source, ns in groups:
         online = sum(1 for n in ns if n["online"])
-        sub_names.append(f"{source}  ({online}/{len(ns)} 在线)")
-    sub_names.append("← 返回")
+        sub_names.append(f"{source}  ({online}/{len(ns)} {t('node_online')})")
+    sub_names.append(t("tui_back"))
 
-    idx = make_menu(sub_names, title="  选择订阅来源:")
+    idx = make_menu(sub_names, title=f"  {t('tui_select_sub_source')}")
     if idx is None or idx == len(groups):
         return
 
     # Step 2: Select node within subscription
     source, sub_nodes = groups[idx]
     clear()
-    header(f"切换节点 — {source}")
+    header(f"{t('node_switch_title')} — {source}")
 
     options = [format_node_line(n) for n in sub_nodes]
-    options.append("← 返回")
+    options.append(t("tui_back"))
 
-    idx = make_menu(options, title="  选择节点:")
+    idx = make_menu(options, title=f"  {t('tui_select_node')}")
     if idx is None or idx == len(sub_nodes):
         return
 
@@ -380,7 +392,7 @@ def show_node_selector_by_sub(config, nodes):
             sel["default"] = node["tag"]
             save_config(config)
             restart()
-            print(f"\n  {C_GREEN}✓{C_RESET} 已切换到: {node['tag']}")
+            print(f"\n  {C_GREEN}✓{C_RESET} {t('node_switched', name=node['tag'])}")
     pause()
 
 
@@ -389,7 +401,7 @@ def show_node_selector_by_sub(config, nodes):
 def show_subs_menu():
     while True:
         clear()
-        header("订阅管理")
+        header(t("menu_subs"))
 
         subs_data = load_subscriptions()
         subs = subs_data.get("subscriptions", [])
@@ -400,15 +412,15 @@ def show_subs_menu():
                 name = s.get("name", f"sub{i+1}")
                 count = s.get("node_count", len(s.get("nodes", [])))
                 updated = time_ago(s.get("last_update"))
-                print(f"  {i+1}. {name}  {count}个节点  {updated}")
+                print(f"  {i+1}. {name}  {t('tui_node_count', count=count)}  {updated}")
             print()
 
         idx = make_menu([
-            "添加订阅",
-            "删除订阅",
-            "更新全部",
-            "更新单个",
-            "← 返回",
+            t("sub_add"),
+            t("sub_delete"),
+            t("sub_update_all"),
+            t("sub_update_one"),
+            t("tui_back"),
         ])
 
         if idx is None or idx == 4:
@@ -425,46 +437,46 @@ def show_subs_menu():
 
 def sub_add():
     clear()
-    header("添加订阅")
-    url = input(f"\n  订阅URL: ").strip()
+    header(t("sub_add"))
+    url = input(f"\n  {t('sub_enter_url')}").strip()
     if not url:
         return
-    name = input(f"  名称 (可选): ").strip() or None
+    name = input(f"  {t('sub_enter_name')}").strip() or None
 
-    print(f"\n  {C_DIM}获取中...{C_RESET}")
+    print(f"\n  {C_DIM}{t('tui_fetching')}{C_RESET}")
     sub, err = add_subscription(url, name)
     if err:
         print(f"  {C_RED}✗{C_RESET} {err}")
     else:
-        print(f"  {C_GREEN}✓{C_RESET} {sub['name']} ({sub['node_count']} 个节点)")
+        print(f"  {C_GREEN}✓{C_RESET} {t('sub_added', name=sub['name'], count=sub['node_count'])}")
     pause()
 
 
 def sub_remove(subs):
     if not subs:
-        print(f"\n  没有订阅")
+        print(f"\n  {t('sub_no_subs')}")
         pause()
         return
 
     clear()
-    header("删除订阅")
-    options = [f"{s.get('name', f'sub{i+1}')} ({s.get('node_count', 0)}个)" for i, s in enumerate(subs)]
-    options.append("← 返回")
+    header(t("sub_delete"))
+    options = [f"{s.get('name', f'sub{i+1}')} ({s.get('node_count', 0)})" for i, s in enumerate(subs)]
+    options.append(t("tui_back"))
 
-    idx = make_menu(options, title="  选择:")
+    idx = make_menu(options, title=f"  {t('tui_select')}")
     if idx is None or idx == len(subs):
         return
 
     removed = remove_subscription(idx)
     if removed:
-        print(f"\n  {C_GREEN}✓{C_RESET} 已删除: {removed.get('name', '')}")
+        print(f"\n  {C_GREEN}✓{C_RESET} {t('sub_deleted', name=removed.get('name', ''))}")
     pause()
 
 
 def sub_update_all():
     clear()
-    header("更新全部订阅")
-    print(f"\n  {C_DIM}更新中...{C_RESET}")
+    header(t("sub_update_all"))
+    print(f"\n  {C_DIM}{t('tui_updating')}{C_RESET}")
 
     results = update_all_subscriptions()
     print()
@@ -472,31 +484,31 @@ def sub_update_all():
         if err:
             print(f"  {C_RED}✗{C_RESET} {name}: {err}")
         else:
-            print(f"  {C_GREEN}✓{C_RESET} {name}: {count} 个节点")
+            print(f"  {C_GREEN}✓{C_RESET} {t('sub_updated', name=name, count=count)}")
     pause()
 
 
 def sub_update_single(subs):
     if not subs:
-        print(f"\n  没有订阅")
+        print(f"\n  {t('sub_no_subs')}")
         pause()
         return
 
     clear()
-    header("更新单个订阅")
+    header(t("sub_update_one"))
     options = [s.get('name', f'sub{i+1}') for i, s in enumerate(subs)]
-    options.append("← 返回")
+    options.append(t("tui_back"))
 
-    idx = make_menu(options, title="  选择:")
+    idx = make_menu(options, title=f"  {t('tui_select')}")
     if idx is None or idx == len(subs):
         return
 
-    print(f"\n  {C_DIM}更新中...{C_RESET}")
+    print(f"\n  {C_DIM}{t('tui_updating')}{C_RESET}")
     sub, err = update_subscription(idx)
     if err:
         print(f"  {C_RED}✗{C_RESET} {err}")
     else:
-        print(f"  {C_GREEN}✓{C_RESET} {sub['name']} ({sub['node_count']} 个节点)")
+        print(f"  {C_GREEN}✓{C_RESET} {t('sub_updated', name=sub['name'], count=sub['node_count'])}")
     pause()
 
 
@@ -505,28 +517,28 @@ def sub_update_single(subs):
 def show_settings(prefs):
     while True:
         clear()
-        header("设置")
+        header(t("menu_settings"))
         print()
         # Show current DNS
         config = load_config()
         current_dns = get_current_dns(config)
-        dns_name = DNS_PRESETS.get(current_dns, {}).get("name", "未知") if current_dns else "未知"
-        info("DNS", dns_name)
+        dns_name = DNS_PRESETS.get(current_dns, {}).get("name", t("tui_unknown")) if current_dns else t("tui_unknown")
+        info(t("tui_current_dns"), dns_name)
         # Show custom rules count
         custom_data = load_custom_rules()
         custom_count = len(custom_data.get("rules", []))
-        info("自定义规则", f"{custom_count} 条")
-        info("更新间隔", f"{prefs.get('update_interval_hours', 6)} 小时")
-        info("测速URL", prefs.get("speedtest_url", "默认"))
-        info("延迟容差", f"{prefs.get('tolerance_ms', 50)} ms")
+        info(t("tui_custom_rules"), t("tui_rules_count", count=custom_count))
+        info(t("tui_update_interval"), f"{prefs.get('update_interval_hours', 6)} {t('tui_hours')}")
+        info(t("tui_speedtest_url"), prefs.get("speedtest_url", t("tui_default")))
+        info(t("tui_tolerance"), f"{prefs.get('tolerance_ms', 50)} ms")
 
         idx = make_menu([
-            "DNS 设置",
-            "自定义路由规则",
-            "修改更新间隔",
-            "修改测速URL",
-            "修改延迟容差",
-            "← 返回",
+            t("menu_dns"),
+            t("menu_rules"),
+            t("tui_change_update_interval"),
+            t("tui_change_speedtest_url"),
+            t("tui_change_tolerance"),
+            t("tui_back"),
         ])
 
         if idx is None or idx == 5:
@@ -536,21 +548,21 @@ def show_settings(prefs):
         elif idx == 1:
             show_custom_rules_menu()
         elif idx == 2:
-            val = input(f"\n  更新间隔 (小时): ").strip()
+            val = input(f"\n  {t('tui_enter_update_interval')}").strip()
             if val.isdigit() and int(val) > 0:
                 prefs["update_interval_hours"] = int(val)
                 save_preferences(prefs)
                 print(f"  {C_GREEN}✓{C_RESET}")
             pause()
         elif idx == 3:
-            val = input(f"\n  测速URL: ").strip()
+            val = input(f"\n  {t('tui_enter_speedtest_url')}").strip()
             if val:
                 prefs["speedtest_url"] = val
                 save_preferences(prefs)
                 print(f"  {C_GREEN}✓{C_RESET}")
             pause()
         elif idx == 4:
-            val = input(f"\n  延迟容差 (ms): ").strip()
+            val = input(f"\n  {t('tui_enter_tolerance')}").strip()
             if val.isdigit():
                 prefs["tolerance_ms"] = int(val)
                 save_preferences(prefs)
@@ -561,12 +573,12 @@ def show_settings(prefs):
 def show_dns_menu(config):
     """DNS provider selection menu"""
     clear()
-    header("DNS 设置")
+    header(t("dns_title"))
 
     current = get_current_dns(config)
-    current_name = DNS_PRESETS.get(current, {}).get("name", "未知") if current else "未知"
+    current_name = DNS_PRESETS.get(current, {}).get("name", t("tui_unknown")) if current else t("tui_unknown")
     print()
-    info("当前 DNS", current_name)
+    info(t("dns_current"), current_name)
     print()
 
     options = []
@@ -575,16 +587,16 @@ def show_dns_menu(config):
         marker = " ✓" if key == current else ""
         options.append(f"{preset['name']}{marker}  — {preset['desc']}")
         keys.append(key)
-    options.append("← 返回")
+    options.append(t("tui_back"))
 
-    idx = make_menu(options, title="  选择 DNS:")
+    idx = make_menu(options, title=f"  {t('tui_select_dns')}")
     if idx is None or idx == len(keys):
         return
 
     selected_key = keys[idx]
-    print(f"\n  {C_DIM}切换中...{C_RESET}")
+    print(f"\n  {C_DIM}{t('tui_switching')}{C_RESET}")
     apply_dns_preset(config, selected_key)
-    print(f"  {C_GREEN}✓{C_RESET} 已切换到 {DNS_PRESETS[selected_key]['name']}")
+    print(f"  {C_GREEN}✓{C_RESET} {t('dns_switched', name=DNS_PRESETS[selected_key]['name'])}")
     pause()
 
 
@@ -594,7 +606,7 @@ def show_custom_rules_menu():
     """Custom routing rules management"""
     while True:
         clear()
-        header("自定义路由规则")
+        header(t("rules_title"))
 
         data = load_custom_rules()
         rules = data.get("rules", [])
@@ -603,15 +615,15 @@ def show_custom_rules_menu():
             print()
             for i, r in enumerate(rules):
                 out = r["outbound"]
-                out_str = "直连" if out == "direct" else ("代理" if out == "proxy" else out)
-                rtype = "后缀" if r["type"] == "domain_suffix" else "关键词"
+                out_str = t("rules_outbound_direct") if out == "direct" else (t("rules_outbound_proxy") if out == "proxy" else out)
+                rtype = t("rules_type_suffix") if r["type"] == "domain_suffix" else t("rules_type_keyword")
                 print(f"  {i+1}. [{rtype}] {r['domain']} → {out_str}")
             print()
 
         idx = make_menu([
-            "添加规则",
-            "删除规则",
-            "← 返回",
+            t("rules_add"),
+            t("rules_delete"),
+            t("tui_back"),
         ])
 
         if idx is None or idx == 2:
@@ -625,28 +637,28 @@ def show_custom_rules_menu():
 def show_add_custom_rule():
     """Add a custom routing rule"""
     clear()
-    header("添加路由规则")
+    header(t("rules_add_title"))
 
-    domain = input(f"\n  域名 (如 example.com 或 .example.com): ").strip()
+    domain = input(f"\n  {t('rules_enter_domain')}").strip()
     if not domain:
         return
 
     # Rule type
     type_idx = make_menu([
-        "域名后缀匹配 (domain_suffix) — 匹配 *.example.com",
-        "关键词匹配 (domain_keyword) — 包含该关键词的域名",
-        "← 返回",
-    ], title="  匹配方式:")
+        t("rules_type_suffix_desc"),
+        t("rules_type_keyword_desc"),
+        t("tui_back"),
+    ], title=f"  {t('rules_match_type')}")
     if type_idx is None or type_idx == 2:
         return
     rule_type = "domain_suffix" if type_idx == 0 else "domain_keyword"
 
     # Outbound
     out_idx = make_menu([
-        "直连 (direct) — 不走代理",
-        "代理 (proxy) — 通过代理",
-        "← 返回",
-    ], title="  出站:")
+        t("rules_outbound_direct_desc"),
+        t("rules_outbound_proxy_desc"),
+        t("tui_back"),
+    ], title=f"  {t('rules_outbound')}")
     if out_idx is None or out_idx == 2:
         return
     outbound = "direct" if out_idx == 0 else "proxy"
@@ -655,34 +667,34 @@ def show_add_custom_rule():
     if err:
         print(f"\n  {C_RED}✗{C_RESET} {err}")
     else:
-        out_str = "直连" if outbound == "direct" else "代理"
-        print(f"\n  {C_GREEN}✓{C_RESET} 已添加: {domain} → {out_str}")
-        print(f"  {C_DIM}切换代理模式后生效{C_RESET}")
+        out_str = t("rules_outbound_direct") if outbound == "direct" else t("rules_outbound_proxy")
+        print(f"\n  {C_GREEN}✓{C_RESET} {t('rules_added_detail', domain=domain, outbound=out_str)}")
+        print(f"  {C_DIM}{t('rules_effect_hint')}{C_RESET}")
     pause()
 
 
 def show_remove_custom_rule(rules):
     """Remove a custom routing rule"""
     if not rules:
-        print(f"\n  没有自定义规则")
+        print(f"\n  {t('rules_empty')}")
         pause()
         return
 
     clear()
-    header("删除路由规则")
+    header(t("rules_delete_title"))
     options = []
     for r in rules:
-        out_str = "直连" if r["outbound"] == "direct" else "代理"
+        out_str = t("rules_outbound_direct") if r["outbound"] == "direct" else t("rules_outbound_proxy")
         options.append(f"{r['domain']} → {out_str}")
-    options.append("← 返回")
+    options.append(t("tui_back"))
 
-    idx = make_menu(options, title="  选择:")
+    idx = make_menu(options, title=f"  {t('tui_select')}")
     if idx is None or idx == len(rules):
         return
 
     removed = remove_custom_rule(idx)
     if removed:
-        print(f"\n  {C_GREEN}✓{C_RESET} 已删除: {removed['domain']}")
+        print(f"\n  {C_GREEN}✓{C_RESET} {t('rules_deleted_detail', domain=removed['domain'])}")
     pause()
 
 
