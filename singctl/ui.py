@@ -172,7 +172,7 @@ def show_mode_menu(config, prefs):
         idx = make_menu([
             "智能分流  — 中国直连，国外代理",
             "全部代理  — 所有流量走代理",
-            "仅代理被墙 — 只代理被墙站点",
+            "仅代理受限 — 只代理受限站点",
             "全局代理  — 指定节点转发全部",
             "直连      — 不走代理",
             "← 返回",
@@ -190,7 +190,7 @@ def show_mode_menu(config, prefs):
             pause()
         elif idx == 2:
             _apply_and_save(config, prefs, "rule", rule_preset="bypass-cn")
-            print(f"\n  {C_GREEN}✓{C_RESET} 已切换到仅代理被墙")
+            print(f"\n  {C_GREEN}✓{C_RESET} 已切换到仅代理受限")
             pause()
         elif idx == 3:
             show_global_node_select(config, prefs)

@@ -109,8 +109,8 @@ RULE_PRESETS = {
         ]
     },
     "bypass-cn": {
-        "name": "仅代理被墙",
-        "desc": "只代理已知被墙站点",
+        "name": "仅代理受限",
+        "desc": "只代理已知受限站点",
         "rules": [
             {"domain_suffix": [
                 ".google.com", ".googleapis.com", ".gstatic.com",
