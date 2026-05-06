@@ -1,6 +1,6 @@
 # qubes-singroute-gateway
 
-> Qubes OS 网络架构实践 — 透明代理、流量转发、策略路由学习项目
+> Qubes OS 透明代理网关 — 零配置、全协议、智能分流
 
 [![Qubes OS](https://img.shields.io/badge/Qubes%20OS-4.3-3f51b5?logo=qubesos)](https://www.qubes-os.org/)
 [![sing-box](https://img.shields.io/badge/sing--box-1.13+-ff6b00)](https://sing-box.sagernet.org/)
@@ -9,45 +9,36 @@
 
 ---
 
-## 项目简介
+## 它做什么
 
-本项目是一个 **Qubes OS 网络架构学习与实践项目**，通过搭建透明代理网关，深入理解 Linux 网络子系统的核心技术：
+在 Qubes OS 的一个 NetVM 上运行 [sing-box](https://sing-box.sagernet.org/)，通过 **TUN 透明代理 + nftables 流量标记 + 策略路由**，把所有连接到这个 NetVM 的 AppVM 的全部流量（TCP/UDP，所有端口）自动走代理转发。
 
-- **nftables** 包过滤与流量标记
-- **策略路由**（Policy Routing）与路由表管理
-- **TUN/TAP** 虚拟网络设备
-- **DNS 分流**与域名解析策略
-- **透明代理**流量转发机制
-- **Python TUI** 终端界面开发
+**AppVM 端零配置** — 不需要装任何软件、改任何设置，只要把 NetVM 指向代理网关就完事了。
 
-项目基于 [sing-box](https://sing-box.sagernet.org/) 通用代理平台，实现了完整的网络流量转发链路，适合作为 Qubes OS 网络架构的学习案例。
+## 为什么用它
 
-## 学习目标
+| 痛点 | 本项目方案 |
+|------|-----------|
+| 每个 VM 都要单独配代理 | ❌ 不需要，改一次 NetVM 全部生效 |
+| 手动配 PAC/SOCKS 环境变量 | ❌ 不存在，透明代理无感知 |
+| 代理软件只管 TCP，UDP 泄露 | ❌ TUN 模式 TCP+UDP 全覆盖 |
+| 切节点要改配置重启 | ❌ singctl TUI 一键切换，自动测速选最优 |
+| 订阅过期忘了更新 | ❌ 每 6 小时自动更新，节点挂了自动剔除 |
+| DNS 污染/泄露 | ✅ 三级 DNS 分流（系统 DNS / 代理 DNS / 直连 DNS） |
 
-通过本项目，你将学到：
+## 核心优势
 
-### 1. Linux 网络基础
-- 网络命名空间与虚拟接口
-- IP 转发与路由表
-- nftables 防火墙规则编写
-- fwmark 标记与策略路由
+**🔒 全流量透明代理** — TUN 模式 + gvisor 用户态协议栈，TCP/UDP/ICMP 全覆盖，不漏任何流量
 
-### 2. 代理技术原理
-- SOCKS/HTTP 代理协议
-- 透明代理实现方式（TUN/redir）
-- 代理协议：vmess/vless/shadowsocks/trojan
-- 传输层：WebSocket/gRPC/HTTP/2
+**⚡ 智能分流** — 按域名/IP 规则自动决定直连或代理，国内直连、国外代理，无需手动切换
 
-### 3. Qubes OS 架构
-- AppVM / NetVM / SysVM 隔离模型
-- 虚拟机间网络通信
-- 持久化存储机制（/rw/config）
+**🎯 多协议支持** — vmess / vless / shadowsocks / trojan / hysteria / tuic / wireguard，WebSocket / gRPC / HTTP/2 传输层
 
-### 4. Python 开发实践
-- TUI 终端界面开发
-- 并发网络编程（测速模块）
-- 配置文件管理
-- systemd 服务集成
+**🛡️ Qubes 原生隔离** — 代理运行在独立 NetVM 中，AppVM 之间完全隔离，不影响 Qubes 安全模型
+
+**🖥️ TUI 管理工具** — singctl 终端界面：订阅管理、节点测速、模式切换、DNS 选择、自定义规则，一个界面搞定
+
+**🔄 自动化运维** — 订阅自动更新（6h）、节点健康监控（5min 检测，连续 3 次失败自动剔除）、配置重启持久化
 
 ---
 
