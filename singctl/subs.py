@@ -249,6 +249,10 @@ def sync_nodes_to_config():
                     ob = _parse_trojan_uri(uri, tag)
             
             if ob:
+                # Skip dead nodes (e.g. 127.0.0.1)
+                server = ob.get("server", "")
+                if server in ("127.0.0.1", "localhost", "0.0.0.0"):
+                    continue
                 all_outbounds.append(ob)
                 node_tags.append(tag)
     

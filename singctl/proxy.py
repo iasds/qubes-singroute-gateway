@@ -179,9 +179,8 @@ def apply_mode(config, mode, node_tag=None, rule_preset=None, rules_data=None):
 
     if mode == "direct":
         set_route_final(config, "direct")
-        # Keep rules minimal
+        # Keep rules minimal — no dns-out (removed in sing-box 1.13)
         set_route_rules(config, [
-            {"protocol": "dns", "outbound": "dns-out"},
             {"ip_cidr": ["10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16", "172.16.0.0/12", "192.168.0.0/16"], "outbound": "direct"}
         ])
 
@@ -190,7 +189,6 @@ def apply_mode(config, mode, node_tag=None, rule_preset=None, rules_data=None):
             raise ValueError("Global mode requires a node tag")
         set_route_final(config, node_tag)
         set_route_rules(config, [
-            {"protocol": "dns", "outbound": "dns-out"},
             {"ip_cidr": ["10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16", "172.16.0.0/12", "192.168.0.0/16"], "outbound": "direct"}
         ])
 

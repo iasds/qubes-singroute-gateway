@@ -141,7 +141,7 @@ config = {
         'servers': [
             {'type': 'udp', 'tag': 'dns-system', 'server': '10.139.1.1', 'server_port': 53, 'detour': 'direct'},
             {'type': 'https', 'tag': 'dns-proxy', 'server': '8.8.8.8', 'detour': 'auto'},
-            {'type': 'https', 'tag': 'dns-direct', 'server': '119.29.29.29', 'detour': 'auto'}
+            {'type': 'https', 'tag': 'dns-direct', 'server': '119.29.29.29', 'detour': 'direct'}
         ],
         'rules': [
             {'domain_suffix': ['.cn', 'baidu.com', 'qq.com', 'taobao.com', 'bilibili.com', 'doh.pub', 'gfw250.com', 'iepl', 'mojcn.com', 'cnmjin.net'], 'server': 'dns-system'}
