@@ -1,2 +1,2 @@
-"""singctl - sing-box controller TUI"""
-__version__ = "0.2.0"
+"""qubes-proxy-gateway — Qubes OS transparent proxy via sing-box"""
+__version__ = "1.2.0"
