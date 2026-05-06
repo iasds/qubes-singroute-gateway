@@ -133,10 +133,11 @@ t() {
         text="$key"
     fi
     
-    # Replace placeholders
-    while [ $# -ge 2 ]; do
-        text="${text//\{$1\}/$2}"
-        shift 2
+    # Replace {key} placeholders from key=value arguments
+    for arg in "$@"; do
+        local k="${arg%%=*}"
+        local v="${arg#*=}"
+        text="${text//\{$k\}/$v}"
     done
     
     echo "$text"
@@ -465,12 +466,12 @@ config = {
     'inbounds': [
         {'type': 'tun', 'tag': 'tun-in', 'interface_name': 'tun0',
          'address': ['172.19.0.1/30', 'fdfe:dcba:9877::1/126'],
-         'auto_route': True, 'strict_route': True, 'stack': 'gvisor', 'mtu': 9000},
+         'auto_route': True, 'strict_route': False, 'stack': 'gvisor', 'mtu': 9000},
         {'type': 'mixed', 'tag': 'mixed-local', 'listen': '127.0.0.1', 'listen_port': 7890}
     ],
     'outbounds': [
         {'type': 'direct', 'tag': 'direct', 'domain_resolver': {'server': 'dns-system', 'strategy': 'prefer_ipv4'}},
-        {'type': 'urltest', 'tag': 'auto', 'outbounds': [], 'url': 'https://www.gstatic.com/generate_204', 'interval': '3m', 'tolerance': 50}
+        {'type': 'urltest', 'tag': 'auto', 'outbounds': ['direct'], 'url': 'https://www.gstatic.com/generate_204', 'interval': '3m', 'tolerance': 50}
     ],
     'route': {
         'rules': [
@@ -500,12 +501,12 @@ config = {
     'inbounds': [
         {'type': 'tun', 'tag': 'tun-in', 'interface_name': 'tun0',
          'address': ['172.19.0.1/30', 'fdfe:dcba:9877::1/126'],
-         'auto_route': True, 'strict_route': True, 'stack': 'gvisor', 'mtu': 9000},
+         'auto_route': True, 'strict_route': False, 'stack': 'gvisor', 'mtu': 9000},
         {'type': 'mixed', 'tag': 'mixed-local', 'listen': '127.0.0.1', 'listen_port': 7890}
     ],
     'outbounds': [
         {'type': 'direct', 'tag': 'direct', 'domain_resolver': {'server': 'dns-system', 'strategy': 'prefer_ipv4'}},
-        {'type': 'urltest', 'tag': 'auto', 'outbounds': [], 'url': 'https://www.gstatic.com/generate_204', 'interval': '3m', 'tolerance': 50}
+        {'type': 'urltest', 'tag': 'auto', 'outbounds': ['direct'], 'url': 'https://www.gstatic.com/generate_204', 'interval': '3m', 'tolerance': 50}
     ],
     'route': {
         'rules': [

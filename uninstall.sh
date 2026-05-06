@@ -47,11 +47,18 @@ nft delete table inet singbox-mark 2>/dev/null || true
 info "删除策略路由..."
 ip rule del fwmark 0x1 table 2022 2>/dev/null || true
 
-# Remove rc.local entries (keep other entries)
+# Remove rc.local and nftables bypass rules
 if [ -f /rw/config/rc.local ]; then
     info "清理 rc.local..."
-    sed -i '/qubes-singroute-gateway/,/^RCLOCAL$/d' /rw/config/rc.local 2>/dev/null || true
+    # rc.local only contains our startup script, safe to clear
+    truncate -s 0 /rw/config/rc.local
 fi
+# Remove bypass nftables table
+nft delete table inet singbox-bypass 2>/dev/null || true
+# Remove bypass ip rule
+ip rule del fwmark 0x2 lookup main 2>/dev/null || true
+# Remove qubes firewall script
+rm -f /rw/config/qubes-firewall-user-script
 
 echo ""
 info "=== 卸载完成 ==="
