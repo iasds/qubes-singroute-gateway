@@ -701,6 +701,10 @@ def show_remove_custom_rule(rules):
 # ─── Entry Point ─────────────────────────────────────────
 
 def main():
+    from .i18n import load_language
+    from .data import load_preferences
+    prefs = load_preferences()
+    load_language(prefs.get("lang", "zh"))
     try:
         show_main()
     except KeyboardInterrupt:
