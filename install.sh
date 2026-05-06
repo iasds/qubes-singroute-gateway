@@ -116,7 +116,7 @@ cp -r "$SCRIPT_DIR/singctl/"* "$INSTALL_DIR/"
 # Create singctl launcher
 cat > "$BIN_DIR/singctl" << 'EOF'
 #!/bin/bash
-cd /usr/local/lib/singctl
+cd /usr/local/lib
 exec python3 -m singctl "$@"
 EOF
 chmod +x "$BIN_DIR/singctl"
@@ -124,7 +124,7 @@ chmod +x "$BIN_DIR/singctl"
 # Create update command
 cat > "$BIN_DIR/update-singbox-config" << 'EOF'
 #!/bin/bash
-cd /usr/local/lib/singctl
+cd /usr/local/lib
 python3 -c "
 from singctl.subs import update_all_subscriptions, sync_nodes_to_config
 print('更新订阅...')
