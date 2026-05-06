@@ -320,6 +320,13 @@ def apply_mode(config, mode, node_tag=None, rule_preset=None, rules_data=None):
                 selector["default"] = node_tag
 
     save_config(config)
+
+    # Ensure route.default_domain_resolver exists (sing-box 1.13+ requirement)
+    if "route" not in config:
+        config["route"] = {}
+    if "default_domain_resolver" not in config["route"]:
+        config["route"]["default_domain_resolver"] = {"server": "dns-system", "strategy": "prefer_ipv4"}
+
     restart()
     return config
 

@@ -259,11 +259,17 @@ def sync_nodes_to_config():
     # Update config
     config["outbounds"] = all_outbounds + system_outbounds
     
+    # Ensure route.default_domain_resolver exists (sing-box 1.13+ requirement)
+    if "route" not in config:
+        config["route"] = {}
+    if "default_domain_resolver" not in config["route"]:
+        config["route"]["default_domain_resolver"] = {"server": "dns-system", "strategy": "prefer_ipv4"}
+
     # Update urltest outbound
     for o in config["outbounds"]:
         if o.get("type") == "urltest":
             o["outbounds"] = node_tags
-    
+
     save_config(config)
     return len(node_tags)
 

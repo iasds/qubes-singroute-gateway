@@ -478,7 +478,8 @@ config = {
             {'domain_suffix': ['.cn'], 'outbound': 'direct'},
             {'ip_cidr': ['10.0.0.0/8', '100.64.0.0/10', '127.0.0.0/8', '169.254.0.0/16', '172.16.0.0/12', '192.168.0.0/16'], 'outbound': 'direct'}
         ],
-        'final': 'auto'
+        'final': 'auto',
+        'default_domain_resolver': {'server': 'dns-system', 'strategy': 'prefer_ipv4'}
     }
 }
 with open('$CONFIG_DIR/config.json', 'w') as f:
@@ -512,7 +513,8 @@ config = {
         'rules': [
             {'ip_cidr': ['10.0.0.0/8', '100.64.0.0/10', '127.0.0.0/8', '169.254.0.0/16', '172.16.0.0/12', '192.168.0.0/16'], 'outbound': 'direct'}
         ],
-        'final': 'auto'
+        'final': 'auto',
+        'default_domain_resolver': {'server': 'dns-system', 'strategy': 'prefer_ipv4'}
     }
 }
 with open('$CONFIG_DIR/config.json', 'w') as f:
