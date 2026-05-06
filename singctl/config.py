@@ -6,6 +6,7 @@ SINGBOX_DIR = "/rw/config/sing-box"
 CONFIG_JSON = os.path.join(SINGBOX_DIR, "config.json")
 PREFERENCES_JSON = os.path.join(SINGBOX_DIR, "singctl-preferences.json")
 SUBSCRIPTIONS_JSON = os.path.join(SINGBOX_DIR, "singctl-subscriptions.json")
+CUSTOM_RULES_JSON = os.path.join(SINGBOX_DIR, "singctl-custom-rules.json")
 
 # Speedtest
 DEFAULT_SPEEDTEST_URL = "https://www.gstatic.com/generate_204"

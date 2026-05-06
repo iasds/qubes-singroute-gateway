@@ -1,0 +1,12 @@
+[Unit]
+Description=sing-box node health monitor
+After=sing-box.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/python3 -u /usr/local/lib/singctl/monitor.py
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

@@ -4,7 +4,7 @@ import time
 import urllib.request
 import ssl
 import json
-from .config import CONFIG_JSON, SINGBOX_DIR
+from .config import CONFIG_JSON, SINGBOX_DIR, CUSTOM_RULES_JSON
 from .data import load_config, save_config
 
 
@@ -173,56 +173,6 @@ def detect_current_mode(config):
         return "rule", None, "smart-split"
 
 
-def apply_mode(config, mode, node_tag=None, rule_preset=None, rules_data=None):
-    """Apply a proxy mode to the config and restart sing-box"""
-    from .config import RULE_PRESETS
-
-    if mode == "direct":
-        set_route_final(config, "direct")
-        # Keep rules minimal — no dns-out (removed in sing-box 1.13)
-        set_route_rules(config, [
-            {"ip_cidr": ["10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16", "172.16.0.0/12", "192.168.0.0/16"], "outbound": "direct"}
-        ])
-
-    elif mode == "global":
-        if not node_tag:
-            raise ValueError("Global mode requires a node tag")
-        set_route_final(config, node_tag)
-        set_route_rules(config, [
-            {"ip_cidr": ["10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16", "172.16.0.0/12", "192.168.0.0/16"], "outbound": "direct"}
-        ])
-
-    elif mode == "rule":
-        # Restore selector/urltest as final
-        selector = find_selector_outbound(config)
-        urltest = find_urltest_outbound(config)
-        if selector:
-            set_route_final(config, selector["tag"])
-        elif urltest:
-            set_route_final(config, urltest["tag"])
-        else:
-            set_route_final(config, "proxy")
-
-        # Apply rule preset
-        if rules_data:
-            set_route_rules(config, rules_data)
-        elif rule_preset and rule_preset in RULE_PRESETS:
-            set_route_rules(config, RULE_PRESETS[rule_preset]["rules"])
-
-        # If a specific node is selected in rule mode, update selector
-        if node_tag and selector:
-            obs = selector.get("outbounds", [])
-            if node_tag in obs:
-                obs.remove(node_tag)
-                obs.insert(0, node_tag)
-                selector["outbounds"] = obs
-                selector["default"] = node_tag
-
-    save_config(config)
-    restart()
-    return config
-
-
 def clear_proxy_nodes(config):
     """Remove all proxy nodes from config, keep system outbounds"""
     skip_types = {"selector", "urltest", "direct", "dns", "block"}
@@ -248,6 +198,127 @@ def clear_proxy_nodes(config):
              "outbound": "direct"}
         ]
     
+    save_config(config)
+    restart()
+    return config
+
+
+# ─── Custom Routing Rules ──────────────────────────────────
+
+def load_custom_rules():
+    """Load custom routing rules from persistent storage."""
+    from .data import load_json
+    return load_json(CUSTOM_RULES_JSON, {"rules": []})
+
+
+def save_custom_rules(data):
+    """Save custom routing rules to persistent storage."""
+    from .data import save_json
+    save_json(CUSTOM_RULES_JSON, data)
+
+
+def add_custom_rule(domain, outbound="direct", rule_type="domain_suffix"):
+    """Add a custom routing rule.
+    
+    Args:
+        domain: domain string (e.g. "example.com" or ".example.com")
+        outbound: "direct", "proxy", or a specific node tag
+        rule_type: "domain_suffix" or "domain_keyword"
+    """
+    data = load_custom_rules()
+    rule = {
+        "domain": domain,
+        "outbound": outbound,
+        "type": rule_type,
+    }
+    # Check duplicate
+    for r in data["rules"]:
+        if r["domain"] == domain and r["outbound"] == outbound:
+            return None, "规则已存在"
+    data["rules"].append(rule)
+    save_custom_rules(data)
+    return rule, None
+
+
+def remove_custom_rule(index):
+    """Remove a custom rule by index."""
+    data = load_custom_rules()
+    if 0 <= index < len(data["rules"]):
+        removed = data["rules"].pop(index)
+        save_custom_rules(data)
+        return removed
+    return None
+
+
+def get_custom_route_rules():
+    """Convert custom rules to sing-box route.rules format.
+    
+    Returns a list of route rule dicts that can be appended to the preset rules.
+    """
+    data = load_custom_rules()
+    # Group by outbound and type for efficiency
+    groups = {}
+    for r in data["rules"]:
+        key = (r["outbound"], r["type"])
+        if key not in groups:
+            groups[key] = []
+        groups[key].append(r["domain"])
+
+    rules = []
+    for (outbound, rule_type), domains in groups.items():
+        rules.append({rule_type: domains, "outbound": outbound})
+    return rules
+
+
+def apply_mode(config, mode, node_tag=None, rule_preset=None, rules_data=None):
+    """Apply a proxy mode to the config and restart sing-box.
+    
+    Custom rules are automatically appended to the preset rules.
+    """
+    from .config import RULE_PRESETS
+
+    if mode == "direct":
+        set_route_final(config, "direct")
+        set_route_rules(config, [
+            {"ip_cidr": ["10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16", "172.16.0.0/12", "192.168.0.0/16"], "outbound": "direct"}
+        ])
+
+    elif mode == "global":
+        if not node_tag:
+            raise ValueError("Global mode requires a node tag")
+        set_route_final(config, node_tag)
+        set_route_rules(config, [
+            {"ip_cidr": ["10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16", "172.16.0.0/12", "192.168.0.0/16"], "outbound": "direct"}
+        ])
+
+    elif mode == "rule":
+        selector = find_selector_outbound(config)
+        urltest = find_urltest_outbound(config)
+        if selector:
+            set_route_final(config, selector["tag"])
+        elif urltest:
+            set_route_final(config, urltest["tag"])
+        else:
+            set_route_final(config, "proxy")
+
+        # Apply rule preset + custom rules
+        if rules_data:
+            set_route_rules(config, rules_data)
+        elif rule_preset and rule_preset in RULE_PRESETS:
+            base_rules = list(RULE_PRESETS[rule_preset]["rules"])
+            custom = get_custom_route_rules()
+            if custom:
+                base_rules.extend(custom)
+            set_route_rules(config, base_rules)
+
+        if node_tag and selector:
+            obs = selector.get("outbounds", [])
+            if node_tag in obs:
+                obs.remove(node_tag)
+                obs.insert(0, node_tag)
+                selector["outbounds"] = obs
+                selector["default"] = node_tag
+
     save_config(config)
     restart()
     return config

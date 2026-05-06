@@ -1,5 +1,6 @@
 """TUI interface - clean and minimal"""
 import sys
+import os
 import time
 from simple_term_menu import TerminalMenu
 from .config import (
@@ -13,7 +14,8 @@ from .data import (
 from .proxy import (
     is_running, get_uptime_seconds, get_exit_ip, restart,
     detect_current_mode, apply_mode, clear_proxy_nodes,
-    find_selector_outbound, get_current_dns, apply_dns_preset
+    find_selector_outbound, get_current_dns, apply_dns_preset,
+    load_custom_rules, add_custom_rule, remove_custom_rule
 )
 from .nodes import (
     parse_nodes, speedtest_all, format_node_line, sort_nodes, group_by_sub
@@ -66,19 +68,70 @@ def show_main():
         mode_str = mode_names.get(mode, mode)
         if preset:
             mode_str += f" ({RULE_PRESETS.get(preset, {}).get('name', preset)})"
-        if mode == "global" and node:
-            mode_str += f" → {node}"
 
         nodes = parse_nodes(config)
         subs_data = load_subscriptions()
         sub_count = len(subs_data.get("subscriptions", []))
 
+        # Active node info
+        active_node = None
+        active_latency = None
+        if mode == "global" and node:
+            # Find the node and check latency
+            for n in nodes:
+                if n["tag"] == node:
+                    active_node = n
+                    break
+        elif mode == "rule":
+            # urltest auto-select: show first available node as reference
+            active_node = nodes[0] if nodes else None
+
         status = f"{C_GREEN}●{C_RESET}" if running else f"{C_RED}○{C_RESET}"
         print(f"\n  singctl  {status} {mode_str}")
         print(f"  {'─' * (BOX_W - 4)}")
-        info("出口IP", get_exit_ip() if running else "—")
-        info("运行", uptime_str(get_uptime_seconds()) if running else "—")
-        info("节点", f"{len(nodes)}  |  订阅 {sub_count}  |  更新 {time_ago(prefs.get('last_update'))}")
+
+        # Exit IP and uptime
+        exit_ip = get_exit_ip() if running else "—"
+        uptime = uptime_str(get_uptime_seconds()) if running else "—"
+        info("出口IP", exit_ip)
+        info("运行时间", uptime)
+
+        # Active node
+        if active_node and running:
+            # Quick latency check for the active node
+            from .nodes import _resolve_and_test
+            _, _, active_latency = _resolve_and_test(active_node, timeout=2)
+            lat_str = f"{active_latency}ms" if active_latency else "超时"
+            node_name = active_node["tag"].split("-", 2)[-1] if "-" in active_node["tag"] else active_node["tag"]
+            info("当前节点", f"{active_node.get('flag', '🌐')} {node_name[:30]}  {lat_str}")
+        elif mode == "global" and node:
+            node_name = node.split("-", 2)[-1] if "-" in node else node
+            info("当前节点", node_name)
+
+        # DNS info
+        current_dns = get_current_dns(config)
+        dns_name = DNS_PRESETS.get(current_dns, {}).get("name", "?") if current_dns else "—"
+        info("DNS", dns_name)
+
+        # Node/sub summary
+        online = sum(1 for n in nodes if n.get("online", True))
+        info("节点", f"{len(nodes)} 个  |  订阅 {sub_count}  |  更新 {time_ago(prefs.get('last_update'))}")
+
+        # Monitor status
+        monitor_running = os.path.exists("/tmp/singbox-monitor.pid") and \
+            os.path.isfile("/tmp/singbox-monitor.pid")
+        if monitor_running:
+            try:
+                with open("/tmp/singbox-monitor.pid") as f:
+                    pid = f.read().strip()
+                os.kill(int(pid), 0)
+                monitor_str = f"{C_GREEN}●{C_RESET}"
+            except (ValueError, ProcessLookupError, PermissionError):
+                monitor_str = f"{C_RED}○{C_RESET}"
+                monitor_running = False
+        else:
+            monitor_str = f"{C_RED}○{C_RESET}"
+        info("健康监控", monitor_str)
 
         idx = make_menu([
             "代理模式",
@@ -459,37 +512,44 @@ def show_settings(prefs):
         current_dns = get_current_dns(config)
         dns_name = DNS_PRESETS.get(current_dns, {}).get("name", "未知") if current_dns else "未知"
         info("DNS", dns_name)
+        # Show custom rules count
+        custom_data = load_custom_rules()
+        custom_count = len(custom_data.get("rules", []))
+        info("自定义规则", f"{custom_count} 条")
         info("更新间隔", f"{prefs.get('update_interval_hours', 6)} 小时")
         info("测速URL", prefs.get("speedtest_url", "默认"))
         info("延迟容差", f"{prefs.get('tolerance_ms', 50)} ms")
 
         idx = make_menu([
             "DNS 设置",
+            "自定义路由规则",
             "修改更新间隔",
             "修改测速URL",
             "修改延迟容差",
             "← 返回",
         ])
 
-        if idx is None or idx == 4:
+        if idx is None or idx == 5:
             return
         elif idx == 0:
             show_dns_menu(config)
         elif idx == 1:
+            show_custom_rules_menu()
+        elif idx == 2:
             val = input(f"\n  更新间隔 (小时): ").strip()
             if val.isdigit() and int(val) > 0:
                 prefs["update_interval_hours"] = int(val)
                 save_preferences(prefs)
                 print(f"  {C_GREEN}✓{C_RESET}")
             pause()
-        elif idx == 2:
+        elif idx == 3:
             val = input(f"\n  测速URL: ").strip()
             if val:
                 prefs["speedtest_url"] = val
                 save_preferences(prefs)
                 print(f"  {C_GREEN}✓{C_RESET}")
             pause()
-        elif idx == 3:
+        elif idx == 4:
             val = input(f"\n  延迟容差 (ms): ").strip()
             if val.isdigit():
                 prefs["tolerance_ms"] = int(val)
@@ -525,6 +585,104 @@ def show_dns_menu(config):
     print(f"\n  {C_DIM}切换中...{C_RESET}")
     apply_dns_preset(config, selected_key)
     print(f"  {C_GREEN}✓{C_RESET} 已切换到 {DNS_PRESETS[selected_key]['name']}")
+    pause()
+
+
+# ─── Custom Rules Menu ────────────────────────────────────
+
+def show_custom_rules_menu():
+    """Custom routing rules management"""
+    while True:
+        clear()
+        header("自定义路由规则")
+
+        data = load_custom_rules()
+        rules = data.get("rules", [])
+
+        if rules:
+            print()
+            for i, r in enumerate(rules):
+                out = r["outbound"]
+                out_str = "直连" if out == "direct" else ("代理" if out == "proxy" else out)
+                rtype = "后缀" if r["type"] == "domain_suffix" else "关键词"
+                print(f"  {i+1}. [{rtype}] {r['domain']} → {out_str}")
+            print()
+
+        idx = make_menu([
+            "添加规则",
+            "删除规则",
+            "← 返回",
+        ])
+
+        if idx is None or idx == 2:
+            return
+        elif idx == 0:
+            show_add_custom_rule()
+        elif idx == 1:
+            show_remove_custom_rule(rules)
+
+
+def show_add_custom_rule():
+    """Add a custom routing rule"""
+    clear()
+    header("添加路由规则")
+
+    domain = input(f"\n  域名 (如 example.com 或 .example.com): ").strip()
+    if not domain:
+        return
+
+    # Rule type
+    type_idx = make_menu([
+        "域名后缀匹配 (domain_suffix) — 匹配 *.example.com",
+        "关键词匹配 (domain_keyword) — 包含该关键词的域名",
+        "← 返回",
+    ], title="  匹配方式:")
+    if type_idx is None or type_idx == 2:
+        return
+    rule_type = "domain_suffix" if type_idx == 0 else "domain_keyword"
+
+    # Outbound
+    out_idx = make_menu([
+        "直连 (direct) — 不走代理",
+        "代理 (proxy) — 通过代理",
+        "← 返回",
+    ], title="  出站:")
+    if out_idx is None or out_idx == 2:
+        return
+    outbound = "direct" if out_idx == 0 else "proxy"
+
+    rule, err = add_custom_rule(domain, outbound, rule_type)
+    if err:
+        print(f"\n  {C_RED}✗{C_RESET} {err}")
+    else:
+        out_str = "直连" if outbound == "direct" else "代理"
+        print(f"\n  {C_GREEN}✓{C_RESET} 已添加: {domain} → {out_str}")
+        print(f"  {C_DIM}切换代理模式后生效{C_RESET}")
+    pause()
+
+
+def show_remove_custom_rule(rules):
+    """Remove a custom routing rule"""
+    if not rules:
+        print(f"\n  没有自定义规则")
+        pause()
+        return
+
+    clear()
+    header("删除路由规则")
+    options = []
+    for r in rules:
+        out_str = "直连" if r["outbound"] == "direct" else "代理"
+        options.append(f"{r['domain']} → {out_str}")
+    options.append("← 返回")
+
+    idx = make_menu(options, title="  选择:")
+    if idx is None or idx == len(rules):
+        return
+
+    removed = remove_custom_rule(idx)
+    if removed:
+        print(f"\n  {C_GREEN}✓{C_RESET} 已删除: {removed['domain']}")
     pause()
 
 

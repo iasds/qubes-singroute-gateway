@@ -210,12 +210,36 @@ fi
 # Start sing-box
 systemctl start sing-box
 
+# Step 7: Install auto-update timer and monitor service
+info "[7/6] 安装辅助服务..."
+
+# Auto-update script
+cp "$SCRIPT_DIR/scripts/auto-update-subscriptions.sh" /usr/local/bin/auto-update-subscriptions
+chmod +x /usr/local/bin/auto-update-subscriptions
+
+# Auto-update systemd service + timer
+cp "$SCRIPT_DIR/scripts/update-subscriptions.service" /etc/systemd/system/
+cp "$SCRIPT_DIR/scripts/update-subscriptions.timer" /etc/systemd/system/
+
+# Monitor service
+mkdir -p /usr/local/lib/singctl
+cp "$SCRIPT_DIR/singctl/monitor.py" /usr/local/lib/singctl/monitor.py
+cp "$SCRIPT_DIR/scripts/singbox-monitor.service" /etc/systemd/system/
+
+systemctl daemon-reload
+systemctl enable --now update-subscriptions.timer
+systemctl enable singbox-monitor
+
 echo ""
 info "=== 安装完成 ==="
 echo ""
 echo "使用方法:"
 echo "  singctl                    # 打开管理界面"
 echo "  update-singbox-config      # 更新订阅"
+echo ""
+echo "自动服务:"
+echo "  订阅自动更新: 每 6 小时 (systemctl status update-subscriptions.timer)"
+echo "  节点健康监控: 持续运行 (systemctl status singbox-monitor)"
 echo ""
 echo "下一步:"
 echo "  1. 运行 singctl 添加订阅"

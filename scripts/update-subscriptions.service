@@ -1,0 +1,7 @@
+[Unit]
+Description=sing-box subscription auto-update
+After=network.target sing-box.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/auto-update-subscriptions
