@@ -1,14 +1,14 @@
 #!/bin/bash
 # ============================================================
-#  Qubes Proxy Gateway — 一键安装/更新/卸载
+#  Qubes Singroute Gateway — One-Click Install/Update/Uninstall
 # ============================================================
-#  用法:
-#    bash <(curl -fsSL https://raw.githubusercontent.com/iasds/qubes-singroute-gateway/master/install.sh)
+#  Usage:
+#    sudo bash install.sh
 #
-#  功能:
-#    - 首次运行: 全自动安装 sing-box + singctl + 网络配置
-#    - 再次运行: 自动检测版本，提供 更新/卸载/退出 选项
-#    - 已是最新: 提示无需操作
+#  Features:
+#    - First run: Full auto-install (sing-box + singctl + network)
+#    - Re-run: Auto-detect version, offer update/uninstall/exit
+#    - Multi-language support (10 languages)
 # ============================================================
 set -e
 
@@ -20,7 +20,7 @@ CONFIG_DIR="/rw/config/sing-box"
 SERVICE_FILE="/etc/systemd/system/sing-box.service"
 WORK_DIR="/tmp/qpg-install-$$"
 
-# ── 颜色 ──
+# ── Colors ──
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -34,19 +34,199 @@ warn()  { echo -e "${YELLOW}[!]${NC} $1"; }
 error() { echo -e "${RED}[✗]${NC} $1"; exit 1; }
 step()  { echo -e "${CYAN}[→]${NC} $1"; }
 
-# ── 检查 root ──
+# ── Check root ──
 if [ "$(id -u)" -ne 0 ]; then
-    error "请使用 sudo 运行此脚本"
+    error "Please run with sudo / 请使用 sudo 运行"
 fi
 
-# ── 清理函数 ──
+# ── Cleanup ──
 cleanup() {
     rm -rf "$WORK_DIR" 2>/dev/null
 }
 trap cleanup EXIT
 
 # ============================================================
-#  版本检测
+#  Language Selection
+# ============================================================
+
+# Language code to native name mapping
+declare -A LANG_NAMES=(
+    [zh]="中文"
+    [en]="English"
+    [ja]="日本語"
+    [ko]="한국어"
+    [ru]="Русский"
+    [es]="Español"
+    [pt]="Português"
+    [ar]="العربية"
+    [tr]="Türkçe"
+    [fa]="فارسی"
+)
+
+# Language code to number
+declare -A LANG_NUMS=(
+    [zh]=1
+    [en]=2
+    [ja]=3
+    [ko]=4
+    [ru]=5
+    [es]=6
+    [pt]=7
+    [ar]=8
+    [tr]=9
+    [fa]=10
+)
+
+# Number to language code
+declare -A NUM_TO_LANG=(
+    [1]=zh
+    [2]=en
+    [3]=ja
+    [4]=ko
+    [5]=ru
+    [6]=es
+    [7]=pt
+    [8]=ar
+    [9]=tr
+    [10]=fa
+)
+
+# Load language file
+load_lang() {
+    local lang=$1
+    local lang_file=""
+    
+    # Try installed location
+    if [ -f "/usr/local/lib/lang/${lang}.json" ]; then
+        lang_file="/usr/local/lib/lang/${lang}.json"
+    # Try working directory
+    elif [ -f "lang/${lang}.json" ]; then
+        lang_file="lang/${lang}.json"
+    # Try script directory
+    elif [ -f "$(dirname "$0")/lang/${lang}.json" ]; then
+        lang_file="$(dirname "$0")/lang/${lang}.json"
+    fi
+    
+    if [ -n "$lang_file" ] && [ -f "$lang_file" ]; then
+        # Parse JSON and export as variables
+        eval "$(python3 -c "
+import json, sys
+with open('$lang_file', 'r', encoding='utf-8') as f:
+    d = json.load(f)
+for k, v in d.items():
+    if isinstance(v, str):
+        # Escape single quotes
+        v = v.replace(\"'\", \"'\\\\''\")
+        print(f\"L_{k}='{v}'\")
+")"
+    fi
+}
+
+# Get translation
+t() {
+    local key="$1"
+    shift
+    local var="L_${key}"
+    local text="${!var}"
+    
+    if [ -z "$text" ]; then
+        text="$key"
+    fi
+    
+    # Replace placeholders
+    while [ $# -ge 2 ]; do
+        text="${text//\{$1\}/$2}"
+        shift 2
+    done
+    
+    echo "$text"
+}
+
+# Show language selection menu
+show_language_menu() {
+    echo ""
+    echo -e "${BOLD}╔══════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${BOLD}║${NC}   ${CYAN}Qubes Singroute Gateway${NC}                              ${BOLD}║${NC}"
+    echo -e "${BOLD}║${NC}   Install / Update / Uninstall                          ${BOLD}║${NC}"
+    echo -e "${BOLD}╚══════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "${BOLD}  Please select your language / 请选择语言:${NC}"
+    echo ""
+    echo -e "  ${CYAN}[1]${NC}  中文"
+    echo -e "  ${CYAN}[2]${NC}  English"
+    echo -e "  ${CYAN}[3]${NC}  日本語"
+    echo -e "  ${CYAN}[4]${NC}  한국어"
+    echo -e "  ${CYAN}[5]${NC}  Русский"
+    echo -e "  ${CYAN}[6]${NC}  Español"
+    echo -e "  ${CYAN}[7]${NC}  Português"
+    echo -e "  ${CYAN}[8]${NC}  العربية"
+    echo -e "  ${CYAN}[9]${NC}  Türkçe"
+    echo -e "  ${CYAN}[10]${NC} فارسی"
+    echo ""
+    
+    while true; do
+        read -p "  Select [1-10]: " choice
+        if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le 10 ]; then
+            SELECTED_LANG="${NUM_TO_LANG[$choice]}"
+            break
+        fi
+        echo -e "  ${RED}Invalid choice / 无效选择${NC}"
+    done
+}
+
+# Get saved language
+get_saved_lang() {
+    if [ -f "$CONFIG_DIR/singctl-preferences.json" ]; then
+        python3 -c "
+import json
+try:
+    with open('$CONFIG_DIR/singctl-preferences.json') as f:
+        d = json.load(f)
+    print(d.get('language', ''))
+except:
+    print('')
+" 2>/dev/null || echo ""
+    else
+        echo ""
+    fi
+}
+
+# Save language to config
+save_lang() {
+    local lang=$1
+    local prefs_file="$CONFIG_DIR/singctl-preferences.json"
+    
+    if [ -f "$prefs_file" ]; then
+        # Update existing file
+        python3 -c "
+import json
+with open('$prefs_file', 'r') as f:
+    d = json.load(f)
+d['language'] = '$lang'
+with open('$prefs_file', 'w') as f:
+    json.dump(d, f, indent=2, ensure_ascii=False)
+"
+    else
+        # Create new file
+        mkdir -p "$CONFIG_DIR"
+        echo "{\"language\": \"$lang\"}" > "$prefs_file"
+    fi
+}
+
+# ============================================================
+#  Header
+# ============================================================
+show_header() {
+    echo ""
+    echo -e "${BOLD}╔══════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${BOLD}║${NC}   ${CYAN}$(t install_title)${NC}"
+    echo -e "${BOLD}║${NC}   ${DIM}$(t install_subtitle)${NC}"
+    echo -e "${BOLD}╚══════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+}
+
+# ============================================================
+#  Version Detection
 # ============================================================
 get_local_version() {
     if [ -f "$INSTALL_DIR/__init__.py" ]; then
@@ -57,7 +237,6 @@ get_local_version() {
 }
 
 get_remote_version() {
-    # 方法1: raw 文件（公开仓库）
     local ver
     ver=$(curl -fsSL --connect-timeout 10 \
         "https://raw.githubusercontent.com/$REPO/$BRANCH/singctl/__init__.py" 2>/dev/null \
@@ -66,8 +245,7 @@ get_remote_version() {
         echo "$ver"
         return
     fi
-
-    # 方法2: GitHub API（私有仓库需要 token，公开仓库免费）
+    
     ver=$(curl -s --connect-timeout 10 \
         "https://api.github.com/repos/$REPO/contents/singctl/__init__.py?ref=$BRANCH" 2>/dev/null \
         | grep -oP '"content"\s*:\s*"\K[^"]+' \
@@ -77,127 +255,91 @@ get_remote_version() {
         echo "$ver"
         return
     fi
-
-    # 方法3: 无法获取（私有仓库 + 无 token）
+    
     echo ""
 }
 
 version_gt() {
-    # 比较版本号: $1 > $2
     [ "$(printf '%s\n' "$1" "$2" | sort -V | tail -1)" = "$1" ] && [ "$1" != "$2" ]
 }
 
-# ============================================================
-#  状态检测
-# ============================================================
 detect_status() {
     LOCAL_VER=$(get_local_version)
     REMOTE_VER=$(get_remote_version)
 
     if [ -z "$LOCAL_VER" ]; then
         STATUS="not_installed"
+        STATUS_MSG=$(t status_not_installed)
     elif [ -z "$REMOTE_VER" ]; then
         STATUS="installed_no_remote"
-        STATUS_MSG="已安装 v${LOCAL_VER} (无法检查远程版本)"
+        STATUS_MSG=$(t status_no_remote version="$LOCAL_VER")
     elif [ "$LOCAL_VER" = "$REMOTE_VER" ]; then
         STATUS="up_to_date"
-        STATUS_MSG="已安装 v${LOCAL_VER} (已是最新)"
+        STATUS_MSG=$(t status_up_to_date version="$LOCAL_VER")
     elif version_gt "$REMOTE_VER" "$LOCAL_VER"; then
         STATUS="update_available"
-        STATUS_MSG="已安装 v${LOCAL_VER} → 有新版本 v${REMOTE_VER}"
+        STATUS_MSG=$(t status_update_available local="$LOCAL_VER" remote="$REMOTE_VER")
     else
         STATUS="ahead"
-        STATUS_MSG="已安装 v${LOCAL_VER} (比远程 v${REMOTE_VER} 更新)"
+        STATUS_MSG=$(t status_ahead local="$LOCAL_VER" remote="$REMOTE_VER")
     fi
 }
 
 # ============================================================
-#  显示标题
-# ============================================================
-show_header() {
-    echo ""
-    echo -e "${BOLD}╔══════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${BOLD}║${NC}   ${CYAN}Qubes Proxy Gateway${NC} — 安装/更新/卸载工具            ${BOLD}║${NC}"
-    echo -e "${BOLD}║${NC}   ${DIM}Qubes OS 透明代理网关 (sing-box)${NC}                     ${BOLD}║${NC}"
-    echo -e "${BOLD}╚══════════════════════════════════════════════════════════╝${NC}"
-    echo ""
-}
-
-# ============================================================
-#  安装教程
-# ============================================================
-show_install_tutorial() {
-    echo -e "${BOLD}📖 安装说明${NC}"
-    echo -e "${DIM}────────────────────────────────────────────────────${NC}"
-    echo -e "  本脚本将自动完成以下步骤:"
-    echo -e ""
-    echo -e "  ${CYAN}1.${NC} 安装系统依赖 (python3, nftables, pip)"
-    echo -e "  ${CYAN}2.${NC} 下载并安装 sing-box 代理核心"
-    echo -e "  ${CYAN}3.${NC} 安装 singctl 管理工具"
-    echo -e "  ${CYAN}4.${NC} 配置透明代理网络 (nftables + 路由)"
-    echo -e "  ${CYAN}5.${NC} 创建系统服务 (sing-box + 自动更新 + 监控)"
-    echo -e ""
-    echo -e "  ${DIM}安装完成后，运行 ${BOLD}singctl${NC}${DIM} 打开管理界面${NC}"
-    echo -e "${DIM}────────────────────────────────────────────────────${NC}"
-    echo ""
-}
-
-# ============================================================
-#  更新教程
-# ============================================================
-show_update_tutorial() {
-    echo -e "${BOLD}📖 更新说明${NC}"
-    echo -e "${DIM}────────────────────────────────────────────────────${NC}"
-    echo -e "  更新将执行以下操作:"
-    echo -e ""
-    echo -e "  ${CYAN}1.${NC} 拉取最新代码 (git pull)"
-    echo -e "  ${CYAN}2.${NC} 更新 singctl 管理工具"
-    echo -e "  ${CYAN}3.${NC} 重启相关服务"
-    echo -e ""
-    echo -e "  ${DIM}你的配置和订阅数据不会被覆盖${NC}"
-    echo -e "${DIM}────────────────────────────────────────────────────${NC}"
-    echo ""
-}
-
-# ============================================================
-#  安装函数
+#  Install Function
 # ============================================================
 do_install() {
-    show_install_tutorial
+    echo ""
+    echo -e "${BOLD}$(t tutorial_install_title)${NC}"
+    echo -e "${DIM}────────────────────────────────────────────────────${NC}"
+    echo -e "  $(t tutorial_install_desc)"
+    echo ""
+    echo -e "  ${CYAN}1.${NC} $(t tutorial_install_step1)"
+    echo -e "  ${CYAN}2.${NC} $(t tutorial_install_step2)"
+    echo -e "  ${CYAN}3.${NC} $(t tutorial_install_step3)"
+    echo -e "  ${CYAN}4.${NC} $(t tutorial_install_step4)"
+    echo -e "  ${CYAN}5.${NC} $(t tutorial_install_step5)"
+    echo ""
+    echo -e "  ${DIM}$(t tutorial_install_hint)${NC}"
+    echo -e "${DIM}────────────────────────────────────────────────────${NC}"
+    echo ""
 
-    # Step 0: 安装 git 并克隆仓库
-    step "[0/7] 准备安装文件..."
+    # Save language preference
+    save_lang "$SELECTED_LANG"
+
+    # Step 0: Clone repo
+    step "$(t step_dependencies n=0 total=7)"
     apt-get update -qq
     apt-get install -y -qq git curl
 
     rm -rf "$WORK_DIR"
     mkdir -p "$WORK_DIR"
-    step "克隆仓库..."
+    step "Cloning repository..."
     git clone --depth 1 -b "$BRANCH" "https://github.com/$REPO.git" "$WORK_DIR"
-
     cd "$WORK_DIR"
-    SCRIPT_DIR="$WORK_DIR"
 
-    # Step 1: 安装依赖
-    step "[1/7] 安装系统依赖..."
+    # Copy language files to installed location
+    mkdir -p /usr/local/lib/lang
+    cp lang/*.json /usr/local/lib/lang/
+
+    # Step 1: Install dependencies
+    step "$(t step_dependencies n=1 total=7)"
     apt-get install -y -qq python3 python3-pip nftables
-
-    # Python 包
     pip3 install --break-system-packages simple-term-menu pyyaml 2>/dev/null || \
         pip3 install simple-term-menu pyyaml
 
-    # Step 2: 安装 sing-box
-    step "[2/7] 安装 sing-box..."
+    # Step 2: Install sing-box
+    step "$(t step_singbox n=2 total=7)"
     if ! command -v sing-box &> /dev/null; then
         LOCAL_BIN=""
-        if [ -f "$SCRIPT_DIR/sing-box" ]; then
-            LOCAL_BIN="$SCRIPT_DIR/sing-box"
+        if [ -f "$WORK_DIR/sing-box" ]; then
+            LOCAL_BIN="$WORK_DIR/sing-box"
         elif [ -f "/tmp/sing-box" ]; then
             LOCAL_BIN="/tmp/sing-box"
         fi
 
         if [ -n "$LOCAL_BIN" ]; then
-            info "使用本地二进制: $LOCAL_BIN"
+            info "$(t info_using_local path="$LOCAL_BIN")"
             cp "$LOCAL_BIN" /usr/local/bin/sing-box
             chmod +x /usr/local/bin/sing-box
         else
@@ -211,7 +353,7 @@ do_install() {
             SING_VER=$(curl -s --connect-timeout 10 https://api.github.com/repos/SagerNet/sing-box/releases/latest | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/')
             if [ -n "$SING_VER" ]; then
                 DL_URL="https://github.com/SagerNet/sing-box/releases/download/v${SING_VER}/sing-box-${SING_VER}-linux-${ARCH}.tar.gz"
-                step "下载 sing-box v${SING_VER}..."
+                info "$(t info_downloading version="$SING_VER")"
                 cd /tmp
                 if curl -fL --connect-timeout 15 "$DL_URL" -o sing-box.tar.gz 2>/dev/null; then
                     tar xzf sing-box.tar.gz
@@ -219,34 +361,30 @@ do_install() {
                     chmod +x /usr/local/bin/sing-box
                     rm -rf sing-box-* sing-box.tar.gz
                 else
-                    warn "下载失败，请手动安装 sing-box"
-                    echo "  从 https://github.com/SagerNet/sing-box/releases 下载"
-                    echo "  放到项目目录下，重新运行此脚本"
-                    exit 1
+                    error "$(t error_download_failed)"
                 fi
             else
-                warn "无法获取 sing-box 版本，请手动安装"
-                exit 1
+                error "$(t error_version_check)"
             fi
         fi
-        info "sing-box 安装完成: $(sing-box version | head -1)"
+        info "$(t info_singbox_installed version="$(sing-box version | head -1)")"
     else
-        info "sing-box 已安装: $(sing-box version | head -1)"
+        info "$(t info_singbox_exists version="$(sing-box version | head -1)")"
     fi
 
     cd "$WORK_DIR"
 
-    # Step 3: 创建配置目录
-    step "[3/7] 创建配置目录..."
+    # Step 3: Create config directory
+    step "$(t step_config_dir n=3 total=7)"
     mkdir -p "$CONFIG_DIR"
     chown user:user "$CONFIG_DIR"
 
-    # Step 4: 安装 singctl
-    step "[4/7] 安装 singctl 管理工具..."
+    # Step 4: Install singctl
+    step "$(t step_singctl n=4 total=7)"
     mkdir -p "$INSTALL_DIR"
     cp -r singctl/* "$INSTALL_DIR/"
 
-    # 创建 singctl 启动器
+    # Create singctl launcher
     cat > "$BIN_DIR/singctl" << 'LAUNCHER'
 #!/bin/bash
 cd /usr/local/lib
@@ -254,35 +392,35 @@ exec python3 -m singctl "$@"
 LAUNCHER
     chmod +x "$BIN_DIR/singctl"
 
-    # 创建 update-singbox-config 命令
+    # Create update-singbox-config command
     cat > "$BIN_DIR/update-singbox-config" << 'UPDATER'
 #!/bin/bash
 cd /usr/local/lib
 python3 -c "
 from singctl.subs import update_all_subscriptions, sync_nodes_to_config
-print('更新订阅...')
+print('Updating subscriptions...')
 results = update_all_subscriptions()
 for name, count, err in results:
     if err:
         print(f'  ✗ {name}: {err}')
     else:
-        print(f'  ✓ {name}: {count} 个节点')
+        print(f'  ✓ {name}: {count} nodes')
 count = sync_nodes_to_config()
-print(f'同步完成: {count} 个节点')
+print(f'Sync complete: {count} nodes')
 "
 UPDATER
     chmod +x "$BIN_DIR/update-singbox-config"
 
-    # Step 5: 配置网络
-    step "[5/7] 配置透明代理网络..."
-    if [ -f "$SCRIPT_DIR/scripts/setup-netvm.sh" ]; then
-        bash "$SCRIPT_DIR/scripts/setup-netvm.sh"
+    # Step 5: Configure network
+    step "$(t step_network n=5 total=7)"
+    if [ -f "$WORK_DIR/scripts/setup-netvm.sh" ]; then
+        bash "$WORK_DIR/scripts/setup-netvm.sh"
     else
-        warn "未找到 setup-netvm.sh，跳过网络配置"
+        warn "setup-netvm.sh not found, skipping network config"
     fi
 
-    # Step 6: 配置系统服务
-    step "[6/7] 配置系统服务..."
+    # Step 6: Configure system services
+    step "$(t step_services n=6 total=7)"
     cat > "$SERVICE_FILE" << 'SVC'
 [Unit]
 Description=sing-box service
@@ -302,10 +440,13 @@ SVC
     systemctl daemon-reload
     systemctl enable sing-box
 
-    # 生成初始配置
+    # Generate initial config based on language
     if [ ! -f "$CONFIG_DIR/config.json" ]; then
-        step "生成初始配置..."
-        python3 -c "
+        info "$(t info_generating)"
+        
+        # Default rules: only private IPs for non-Chinese, full rules for Chinese
+        if [ "$SELECTED_LANG" = "zh" ]; then
+            python3 -c "
 import json
 config = {
     'log': {'level': 'info', 'timestamp': True},
@@ -316,8 +457,43 @@ config = {
             {'type': 'https', 'tag': 'dns-direct', 'server': '119.29.29.29', 'detour': 'direct'}
         ],
         'rules': [
-            {'domain_suffix': ['.cn', 'baidu.com', 'qq.com', 'taobao.com', 'bilibili.com', 'doh.pub', 'gfw250.com', 'iepl', 'mojcn.com', 'cnmjin.net'], 'server': 'dns-system'}
+            {'domain_suffix': ['.cn', 'baidu.com', 'qq.com', 'taobao.com', 'bilibili.com'], 'server': 'dns-system'}
         ],
+        'strategy': 'prefer_ipv4',
+        'independent_cache': True
+    },
+    'inbounds': [
+        {'type': 'tun', 'tag': 'tun-in', 'interface_name': 'tun0',
+         'address': ['172.19.0.1/30', 'fdfe:dcba:9877::1/126'],
+         'auto_route': True, 'strict_route': True, 'stack': 'gvisor', 'mtu': 9000},
+        {'type': 'mixed', 'tag': 'mixed-local', 'listen': '127.0.0.1', 'listen_port': 7890}
+    ],
+    'outbounds': [
+        {'type': 'direct', 'tag': 'direct', 'domain_resolver': {'server': 'dns-system', 'strategy': 'prefer_ipv4'}},
+        {'type': 'urltest', 'tag': 'auto', 'outbounds': [], 'url': 'https://www.gstatic.com/generate_204', 'interval': '3m', 'tolerance': 50}
+    ],
+    'route': {
+        'rules': [
+            {'domain_suffix': ['.cn'], 'outbound': 'direct'},
+            {'ip_cidr': ['10.0.0.0/8', '100.64.0.0/10', '127.0.0.0/8', '169.254.0.0/16', '172.16.0.0/12', '192.168.0.0/16'], 'outbound': 'direct'}
+        ],
+        'final': 'auto'
+    }
+}
+with open('$CONFIG_DIR/config.json', 'w') as f:
+    json.dump(config, f, indent=2, ensure_ascii=False)
+"
+        else
+            python3 -c "
+import json
+config = {
+    'log': {'level': 'info', 'timestamp': True},
+    'dns': {
+        'servers': [
+            {'type': 'udp', 'tag': 'dns-system', 'server': '10.139.1.1', 'server_port': 53, 'detour': 'direct'},
+            {'type': 'https', 'tag': 'dns-proxy', 'server': '8.8.8.8', 'detour': 'auto'}
+        ],
+        'rules': [],
         'strategy': 'prefer_ipv4',
         'independent_cache': True
     },
@@ -341,24 +517,25 @@ config = {
 with open('$CONFIG_DIR/config.json', 'w') as f:
     json.dump(config, f, indent=2, ensure_ascii=False)
 "
+        fi
     fi
 
     systemctl start sing-box
 
-    # Step 7: 安装辅助服务
-    step "[7/7] 安装辅助服务..."
-    if [ -f "$SCRIPT_DIR/scripts/auto-update-subscriptions.sh" ]; then
-        cp "$SCRIPT_DIR/scripts/auto-update-subscriptions.sh" /usr/local/bin/auto-update-subscriptions
+    # Step 7: Install auxiliary services
+    step "$(t step_auxiliary n=7 total=7)"
+    if [ -f "$WORK_DIR/scripts/auto-update-subscriptions.sh" ]; then
+        cp "$WORK_DIR/scripts/auto-update-subscriptions.sh" /usr/local/bin/auto-update-subscriptions
         chmod +x /usr/local/bin/auto-update-subscriptions
     fi
-    if [ -f "$SCRIPT_DIR/scripts/update-subscriptions.service" ]; then
-        cp "$SCRIPT_DIR/scripts/update-subscriptions.service" /etc/systemd/system/
+    if [ -f "$WORK_DIR/scripts/update-subscriptions.service" ]; then
+        cp "$WORK_DIR/scripts/update-subscriptions.service" /etc/systemd/system/
     fi
-    if [ -f "$SCRIPT_DIR/scripts/update-subscriptions.timer" ]; then
-        cp "$SCRIPT_DIR/scripts/update-subscriptions.timer" /etc/systemd/system/
+    if [ -f "$WORK_DIR/scripts/update-subscriptions.timer" ]; then
+        cp "$WORK_DIR/scripts/update-subscriptions.timer" /etc/systemd/system/
     fi
-    if [ -f "$SCRIPT_DIR/scripts/singbox-monitor.service" ]; then
-        cp "$SCRIPT_DIR/scripts/singbox-monitor.service" /etc/systemd/system/
+    if [ -f "$WORK_DIR/scripts/singbox-monitor.service" ]; then
+        cp "$WORK_DIR/scripts/singbox-monitor.service" /etc/systemd/system/
     fi
 
     systemctl daemon-reload
@@ -367,40 +544,55 @@ with open('$CONFIG_DIR/config.json', 'w') as f:
 
     echo ""
     echo -e "${GREEN}${BOLD}═══════════════════════════════════════════════════${NC}"
-    echo -e "${GREEN}${BOLD}  ✓ 安装完成！${NC}"
+    echo -e "${GREEN}${BOLD}  $(t success_install)${NC}"
     echo -e "${GREEN}${BOLD}═══════════════════════════════════════════════════${NC}"
     echo ""
-    echo -e "  ${BOLD}快速开始:${NC}"
-    echo -e "    singctl                     打开管理界面"
-    echo -e "    update-singbox-config       手动更新订阅"
+    echo -e "  ${BOLD}$(t quick_start):${NC}"
+    echo -e "    singctl                     $(t cmd_singctl)"
+    echo -e "    update-singbox-config       $(t cmd_update)"
     echo ""
-    echo -e "  ${BOLD}自动服务:${NC}"
-    echo -e "    订阅自动更新    每 6 小时"
-    echo -e "    节点健康监控    持续运行"
+    echo -e "  ${BOLD}$(t auto_services):${NC}"
+    echo -e "    $(t auto_update_desc)    $(t status_active)"
+    echo -e "    $(t auto_monitor_desc)    $(t status_active)"
     echo ""
-    echo -e "  ${BOLD}下一步:${NC}"
-    echo -e "    1. 运行 ${CYAN}singctl${NC} 添加你的订阅"
-    echo -e "    2. 在 dom0 设置 AppVM 的 NetVM:"
+    echo -e "  ${BOLD}$(t next_steps):${NC}"
+    echo -e "    1. $(t next_step1)"
+    echo -e "    2. $(t next_step2)"
     echo -e "       ${DIM}qvm-prefs your-app-vm netvm $(hostname)${NC}"
     echo ""
 }
 
 # ============================================================
-#  更新函数
+#  Update Function
 # ============================================================
 do_update() {
-    show_update_tutorial
+    echo ""
+    echo -e "${BOLD}$(t tutorial_update_title)${NC}"
+    echo -e "${DIM}────────────────────────────────────────────────────${NC}"
+    echo -e "  $(t tutorial_update_desc)"
+    echo ""
+    echo -e "  ${CYAN}1.${NC} $(t tutorial_update_step1)"
+    echo -e "  ${CYAN}2.${NC} $(t tutorial_update_step2)"
+    echo -e "  ${CYAN}3.${NC} $(t tutorial_update_step3)"
+    echo ""
+    echo -e "  ${DIM}$(t tutorial_update_hint)${NC}"
+    echo -e "${DIM}────────────────────────────────────────────────────${NC}"
+    echo ""
 
-    step "拉取最新代码..."
+    step "$(t tutorial_update_step1)..."
     rm -rf "$WORK_DIR"
     mkdir -p "$WORK_DIR"
     git clone --depth 1 -b "$BRANCH" "https://github.com/$REPO.git" "$WORK_DIR"
     cd "$WORK_DIR"
 
-    step "更新 singctl..."
+    step "$(t tutorial_update_step2)..."
     cp -r singctl/* "$INSTALL_DIR/"
+    
+    # Update language files
+    mkdir -p /usr/local/lib/lang
+    cp lang/*.json /usr/local/lib/lang/
 
-    # 更新辅助脚本
+    # Update auxiliary scripts
     if [ -f "scripts/auto-update-subscriptions.sh" ]; then
         cp scripts/auto-update-subscriptions.sh /usr/local/bin/auto-update-subscriptions
     fi
@@ -414,47 +606,47 @@ do_update() {
         cp scripts/singbox-monitor.service /etc/systemd/system/
     fi
 
-    step "重启服务..."
+    step "$(t tutorial_update_step3)..."
     systemctl daemon-reload
     systemctl restart sing-box 2>/dev/null || true
 
     echo ""
     echo -e "${GREEN}${BOLD}═══════════════════════════════════════════════════${NC}"
-    echo -e "${GREEN}${BOLD}  ✓ 更新完成！${NC}"
+    echo -e "${GREEN}${BOLD}  $(t success_update)${NC}"
     echo -e "${GREEN}${BOLD}═══════════════════════════════════════════════════${NC}"
     echo ""
-    echo -e "  已从 v${LOCAL_VER} 更新到 v${REMOTE_VER}"
+    echo -e "  $(t success_updated_from old="$LOCAL_VER" new="$REMOTE_VER")"
     echo ""
 }
 
 # ============================================================
-#  卸载函数
+#  Uninstall Function
 # ============================================================
 do_uninstall() {
     echo ""
-    echo -e "${YELLOW}${BOLD}⚠ 即将卸载 qubes-singroute-gateway${NC}"
+    echo -e "${YELLOW}${BOLD}$(t uninstall_title)${NC}"
     echo -e "${DIM}────────────────────────────────────────────────────${NC}"
-    echo -e "  将执行以下操作:"
-    echo -e "    - 停止并删除 sing-box 服务"
-    echo -e "    - 停止并删除辅助服务 (monitor, auto-update)"
-    echo -e "    - 删除 singctl 工具"
-    echo -e "    - 删除 sing-box 二进制"
-    echo -e "    - ${RED}保留${NC} 配置目录 $CONFIG_DIR"
+    echo -e "  $(t uninstall_desc)"
+    echo -e "    - $(t uninstall_step1)"
+    echo -e "    - $(t uninstall_step2)"
+    echo -e "    - $(t uninstall_step3)"
+    echo -e "    - $(t uninstall_step4)"
+    echo -e "    - ${RED}$(t uninstall_step5)${NC}"
     echo -e "${DIM}────────────────────────────────────────────────────${NC}"
     echo ""
 
-    read -p "确认卸载? (y/N) " -r
+    read -p "$(t confirm_uninstall) (y/N) " -r
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        info "取消卸载"
+        info "Cancelled"
         return
     fi
 
-    step "停止服务..."
+    step "Stopping services..."
     systemctl stop sing-box 2>/dev/null || true
     systemctl stop singbox-monitor 2>/dev/null || true
     systemctl stop update-subscriptions.timer 2>/dev/null || true
 
-    step "删除服务..."
+    step "Removing services..."
     systemctl disable sing-box 2>/dev/null || true
     systemctl disable singbox-monitor 2>/dev/null || true
     systemctl disable update-subscriptions.timer 2>/dev/null || true
@@ -464,99 +656,116 @@ do_uninstall() {
     rm -f /etc/systemd/system/update-subscriptions.timer
     systemctl daemon-reload
 
-    step "删除 singctl..."
+    step "Removing singctl..."
     rm -rf "$INSTALL_DIR"
     rm -f "$BIN_DIR/singctl"
     rm -f "$BIN_DIR/update-singbox-config"
     rm -f "$BIN_DIR/auto-update-subscriptions"
+    rm -rf /usr/local/lib/lang
 
-    step "删除 sing-box..."
+    step "Removing sing-box..."
     rm -f /usr/local/bin/sing-box
 
     echo ""
     echo -e "${GREEN}${BOLD}═══════════════════════════════════════════════════${NC}"
-    echo -e "${GREEN}${BOLD}  ✓ 卸载完成！${NC}"
+    echo -e "${GREEN}${BOLD}  $(t success_uninstall)${NC}"
     echo -e "${GREEN}${BOLD}═══════════════════════════════════════════════════${NC}"
     echo ""
-    echo -e "  ${DIM}配置目录已保留: $CONFIG_DIR${NC}"
-    echo -e "  ${DIM}如需彻底清理: sudo rm -rf $CONFIG_DIR${NC}"
+    echo -e "  ${DIM}$(t uninstall_done): $CONFIG_DIR${NC}"
+    echo -e "  ${DIM}$(t uninstall_clean_hint path="$CONFIG_DIR")${NC}"
     echo ""
 }
 
 # ============================================================
-#  交互菜单
+#  Interactive Menu
 # ============================================================
 show_menu() {
-    echo -e "${BOLD}当前状态:${NC} $STATUS_MSG"
+    echo -e "${BOLD}$(t current_status):${NC} $STATUS_MSG"
     echo ""
     echo -e "${DIM}────────────────────────────────────────────────────${NC}"
 
     case "$STATUS" in
         not_installed)
-            echo -e "  ${CYAN}[1]${NC} 安装"
-            echo -e "  ${DIM}[2]${NC} 退出"
+            echo -e "  ${CYAN}[1]${NC} $(t menu_install)"
+            echo -e "  ${DIM}[2]${NC} $(t menu_exit)"
             echo ""
-            read -p "请选择 [1-2]: " choice
+            read -p "$(t select_prompt max=2)" choice
             case "$choice" in
                 1) do_install ;;
-                2) echo "退出"; exit 0 ;;
-                *) warn "无效选择"; exit 1 ;;
+                2) exit 0 ;;
+                *) warn "$(t error_invalid_choice)"; exit 1 ;;
             esac
             ;;
         update_available)
-            echo -e "  ${CYAN}[1]${NC} 更新到 v${REMOTE_VER}"
-            echo -e "  ${DIM}[2]${NC} 卸载"
-            echo -e "  ${DIM}[3]${NC} 退出"
+            echo -e "  ${CYAN}[1]${NC} $(t menu_update) → v${REMOTE_VER}"
+            echo -e "  ${DIM}[2]${NC} $(t menu_uninstall)"
+            echo -e "  ${DIM}[3]${NC} $(t menu_exit)"
             echo ""
-            read -p "请选择 [1-3]: " choice
+            read -p "$(t select_prompt max=3)" choice
             case "$choice" in
                 1) do_update ;;
                 2) do_uninstall ;;
-                3) echo "退出"; exit 0 ;;
-                *) warn "无效选择"; exit 1 ;;
+                3) exit 0 ;;
+                *) warn "$(t error_invalid_choice)"; exit 1 ;;
             esac
             ;;
         up_to_date|ahead)
-            echo -e "  ${DIM}[1]${NC} 重新安装 (修复)"
-            echo -e "  ${DIM}[2]${NC} 卸载"
-            echo -e "  ${DIM}[3]${NC} 退出"
+            echo -e "  ${DIM}[1]${NC} $(t menu_reinstall)"
+            echo -e "  ${DIM}[2]${NC} $(t menu_uninstall)"
+            echo -e "  ${DIM}[3]${NC} $(t menu_exit)"
             echo ""
-            read -p "请选择 [1-3]: " choice
+            read -p "$(t select_prompt max=3)" choice
             case "$choice" in
                 1) do_install ;;
                 2) do_uninstall ;;
-                3) echo "退出"; exit 0 ;;
-                *) warn "无效选择"; exit 1 ;;
+                3) exit 0 ;;
+                *) warn "$(t error_invalid_choice)"; exit 1 ;;
             esac
             ;;
         installed_no_remote)
-            echo -e "  ${DIM}[1]${NC} 重新安装"
-            echo -e "  ${DIM}[2]${NC} 卸载"
-            echo -e "  ${DIM}[3]${NC} 退出"
+            echo -e "  ${DIM}[1]${NC} $(t menu_reinstall)"
+            echo -e "  ${DIM}[2]${NC} $(t menu_uninstall)"
+            echo -e "  ${DIM}[3]${NC} $(t menu_exit)"
             echo ""
-            read -p "请选择 [1-3]: " choice
+            read -p "$(t select_prompt max=3)" choice
             case "$choice" in
                 1) do_install ;;
                 2) do_uninstall ;;
-                3) echo "退出"; exit 0 ;;
-                *) warn "无效选择"; exit 1 ;;
+                3) exit 0 ;;
+                *) warn "$(t error_invalid_choice)"; exit 1 ;;
             esac
             ;;
     esac
 }
 
 # ============================================================
-#  主流程
+#  Main Flow
 # ============================================================
+
+# Check if language is already saved
+SAVED_LANG=$(get_saved_lang)
+
+if [ -n "$SAVED_LANG" ] && [ "$SAVED_LANG" != "" ]; then
+    # Use saved language
+    SELECTED_LANG="$SAVED_LANG"
+else
+    # First run - show language selection
+    show_language_menu
+fi
+
+# Load language
+load_lang "$SELECTED_LANG"
+
+# Show header
 show_header
 
-# 如果传了参数，直接执行
+# Handle command line arguments
 case "${1:-}" in
     install)   do_install; exit 0 ;;
     update)    detect_status; do_update; exit 0 ;;
     uninstall) do_uninstall; exit 0 ;;
 esac
 
-# 交互模式
+# Interactive mode
 detect_status
 show_menu
