@@ -3,7 +3,7 @@
 #  Qubes Proxy Gateway — 一键安装/更新/卸载
 # ============================================================
 #  用法:
-#    curl -fsSL https://raw.githubusercontent.com/iasds/qubes-proxy-gateway/main/install.sh | sudo bash
+#    bash <(curl -fsSL https://raw.githubusercontent.com/iasds/qubes-proxy-gateway/master/install.sh)
 #
 #  功能:
 #    - 首次运行: 全自动安装 sing-box + singctl + 网络配置
