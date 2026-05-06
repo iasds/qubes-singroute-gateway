@@ -10,11 +10,47 @@ from .config import SPEEDTEST_TIMEOUT, SPEEDTEST_WORKERS, C_GREEN, C_RED, C_GRAY
 
 _geo_cache = {}
 
+# 国家/地区代码 → 中文名称（特殊地区需标注所属）
+_REGION_NAMES = {
+    # 亚洲
+    "CN": "中国", "HK": "中国香港", "MO": "中国澳门", "TW": "中国台湾",
+    "JP": "日本", "KR": "韩国", "SG": "新加坡", "MY": "马来西亚",
+    "TH": "泰国", "VN": "越南", "PH": "菲律宾", "ID": "印度尼西亚",
+    "IN": "印度", "PK": "巴基斯坦", "BD": "孟加拉", "LK": "斯里兰卡",
+    "MM": "缅甸", "KH": "柬埔寨", "LA": "老挝", "NP": "尼泊尔",
+    "MN": "蒙古", "KZ": "哈萨克斯坦", "UZ": "乌兹别克斯坦",
+    # 中东
+    "AE": "阿联酋", "SA": "沙特", "IL": "以色列", "TR": "土耳其",
+    "IR": "伊朗", "IQ": "伊拉克", "QA": "卡塔尔", "BH": "巴林",
+    "KW": "科威特", "OM": "阿曼", "JO": "约旦", "LB": "黎巴嫩",
+    # 欧洲
+    "GB": "英国", "DE": "德国", "FR": "法国", "NL": "荷兰",
+    "BE": "比利时", "CH": "瑞士", "AT": "奥地利", "SE": "瑞典",
+    "NO": "挪威", "DK": "丹麦", "FI": "芬兰", "IT": "意大利",
+    "ES": "西班牙", "PT": "葡萄牙", "PL": "波兰", "CZ": "捷克",
+    "RO": "罗马尼亚", "HU": "匈牙利", "BG": "保加利亚", "HR": "克罗地亚",
+    "GR": "希腊", "UA": "乌克兰", "BY": "白俄罗斯", "LT": "立陶宛",
+    "LV": "拉脱维亚", "EE": "爱沙尼亚", "RS": "塞尔维亚", "SK": "斯洛伐克",
+    "IE": "爱尔兰", "IS": "冰岛", "LU": "卢森堡", "MT": "马耳他",
+    "CY": "塞浦路斯", "MC": "摩纳哥", "AD": "安道尔", "LI": "列支敦士登",
+    # 北美
+    "US": "美国", "CA": "加拿大", "MX": "墨西哥",
+    # 南美
+    "BR": "巴西", "AR": "阿根廷", "CL": "智利", "CO": "哥伦比亚",
+    "PE": "秘鲁", "VE": "委内瑞拉", "EC": "厄瓜多尔", "UY": "乌拉圭",
+    # 大洋洲
+    "AU": "澳大利亚", "NZ": "新西兰",
+    # 非洲
+    "ZA": "南非", "EG": "埃及", "NG": "尼日利亚", "KE": "肯尼亚",
+    "MA": "摩洛哥", "TN": "突尼斯", "GH": "加纳", "ET": "埃塞俄比亚",
+}
 
-def country_flag(code):
+
+def region_text(code):
+    """返回地区中文名称，未知返回代码或🌐"""
     if not code or len(code) != 2:
         return "🌐"
-    return chr(0x1F1E6 + ord(code[0]) - ord('A')) + chr(0x1F1E6 + ord(code[1]) - ord('A'))
+    return _REGION_NAMES.get(code, code)
 
 
 def lookup_ip_geo(ip):
@@ -65,7 +101,7 @@ def parse_nodes(config):
             "online": None,
             "country_code": None,
             "country_name": None,
-            "flag": "🌐",
+            "region": "🌐",
             "sub_source": sub_source,
             "outbound": o
         })
@@ -112,7 +148,7 @@ def speedtest_all(nodes, max_workers=SPEEDTEST_WORKERS):
                 if code:
                     node["country_code"] = code
                     node["country_name"] = name
-                    node["flag"] = country_flag(code)
+                    node["region"] = region_text(code)
             except Exception:
                 node["latency"] = None
                 node["online"] = False
@@ -146,8 +182,8 @@ def format_latency(latency):
 
 
 def format_node_line(node, name_width=30):
-    """Format node line: flag + name + latency"""
-    flag = node.get("flag", "🌐")
+    """Format node line: region + name + latency"""
+    region = node.get("region", "🌐")
     # Clean up tag: remove n000-sub1- prefix
     tag = node["tag"]
     parts = tag.split("-", 2)
@@ -155,7 +191,7 @@ def format_node_line(node, name_width=30):
         tag = parts[2]  # Remove n000-sub1- prefix
     name = tag[:name_width].ljust(name_width)
     lat = format_latency(node["latency"])
-    return f"    {flag} {name} {lat:>14s}"
+    return f"    {region:<6s} {name} {lat:>14s}"
 
 
 def sort_nodes(nodes, by="latency"):

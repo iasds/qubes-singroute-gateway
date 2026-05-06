@@ -103,7 +103,7 @@ def show_main():
             _, _, active_latency = _resolve_and_test(active_node, timeout=2)
             lat_str = f"{active_latency}ms" if active_latency else "超时"
             node_name = active_node["tag"].split("-", 2)[-1] if "-" in active_node["tag"] else active_node["tag"]
-            info("当前节点", f"{active_node.get('flag', '🌐')} {node_name[:30]}  {lat_str}")
+            info("当前节点", f"{active_node.get('region', '🌐')} {node_name[:30]}  {lat_str}")
         elif mode == "global" and node:
             node_name = node.split("-", 2)[-1] if "-" in node else node
             info("当前节点", node_name)
