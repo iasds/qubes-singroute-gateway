@@ -57,10 +57,29 @@ get_local_version() {
 }
 
 get_remote_version() {
-    # 从 GitHub raw 文件获取版本号
-    curl -fsSL --connect-timeout 10 \
+    # 方法1: raw 文件（公开仓库）
+    local ver
+    ver=$(curl -fsSL --connect-timeout 10 \
         "https://raw.githubusercontent.com/$REPO/$BRANCH/singctl/__init__.py" 2>/dev/null \
-        | grep -oP '__version__\s*=\s*"\K[^"]+' || echo ""
+        | grep -oP '__version__\s*=\s*"\K[^"]+' || echo "")
+    if [ -n "$ver" ]; then
+        echo "$ver"
+        return
+    fi
+
+    # 方法2: GitHub API（私有仓库需要 token，公开仓库免费）
+    ver=$(curl -s --connect-timeout 10 \
+        "https://api.github.com/repos/$REPO/contents/singctl/__init__.py?ref=$BRANCH" 2>/dev/null \
+        | grep -oP '"content"\s*:\s*"\K[^"]+' \
+        | base64 -d 2>/dev/null \
+        | grep -oP '__version__\s*=\s*"\K[^"]+' || echo "")
+    if [ -n "$ver" ]; then
+        echo "$ver"
+        return
+    fi
+
+    # 方法3: 无法获取（私有仓库 + 无 token）
+    echo ""
 }
 
 version_gt() {
