@@ -1,13 +1,45 @@
 # qubes-singroute-gateway
 
-English | **[中文](README_zh.md)**
-
 > Qubes OS transparent proxy gateway — zero-config, multi-protocol, smart routing
 
 [![Qubes OS](https://img.shields.io/badge/Qubes%20OS-4.3-3f51b5?logo=qubesos)](https://www.qubes-os.org/)
 [![sing-box](https://img.shields.io/badge/sing--box-1.13+-ff6b00)](https://sing-box.sagernet.org/)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776ab?logo=python&logoColor=white)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
+
+---
+
+## ⚠️ Known Issues — Read Before Using
+
+**The TUN transparent proxy mode has critical unresolved issues. The SOCKS proxy mode works reliably.**
+
+### Unresolved: TUN Transparent Proxy
+
+| Issue | Status | Details |
+|-------|--------|---------|
+| TUN routing doesn't work end-to-end | ❌ Broken | DNS queries reach TUN, but HTTPS traffic doesn't route through proxy outbound. Root cause unknown. |
+| `auto_route: true` creates useless rule | ❌ Bug | Rule `9001: from all lookup 2022 suppress_prefixlength 0` matches nothing — table 2022 only has a default route (prefix 0). |
+| `strict_route: true` causes routing loop | ❌ Bug | sing-box's own outbound traffic gets captured by rule `9003`, creating an infinite loop. |
+| Qubes DNS interception bypasses TUN | ❌ Unresolved | Qubes `ip qubes dnat-dns` chain intercepts DNS at prerouting (-100), but even with higher-priority override (-150), packets don't reach TUN. |
+| DNAT to 127.0.0.1 blocked by Qubes | ❌ Unresolved | Qubes `input` chain policy is DROP. DNAT'd packets from vif don't match any accept rule. Needs `custom-input udp dport 53 accept`. |
+| UDP to 8.8.8.8 blocked by Qubes | ❌ Blocked | Standard DNS upstream unreachable from NetVM. Only `1.1.1.1` and `114.114.114.114` work. |
+| DoH (HTTPS DNS) blocked by Qubes | ❌ Blocked | SSL connections to DoH servers get `UNEXPECTED_EOF_WHILE_READING`. |
+| DNS pollution from proxy nodes | ⚠️ Partial fix | Proxy nodes return fake DNS for IP-based DoH. Fixed by using DoH hostnames (`cloudflare-dns.com`). |
+| sing-box 1.13 removed `dns` inbound | ❌ Limitation | Need external DNS forwarder (Python script) for UDP DNS. `mixed` inbound only handles TCP. |
+
+### What Works
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| SOCKS proxy (`127.0.0.1:7890`) | ✅ Works | All protocols, Google 200 in 0.48s. Use this instead of TUN. |
+| Subscription management | ✅ Works | singctl TUI, auto-update, 8 protocols parsed. |
+| Node health monitoring | ✅ Works | Auto-remove dead nodes, urltest auto-select. |
+| CN direct routing | ✅ Works | Domain/IP rules correctly split CN vs foreign traffic. |
+| DNS pollution fix | ✅ Works | DoH hostnames prevent proxy-side DNS hijacking. |
+
+### Recommendation
+
+**Use the SOCKS proxy mode** (mixed inbound on `127.0.0.1:7890`) instead of TUN transparent proxy. It's reliable and tested. For transparent proxy on Qubes OS, consider [qubes-clash-gateway](https://github.com/iasds/qubes-clash-gateway) (mihomo-based, has `auto-redirect` that auto-configures nftables).
 
 ---
 
