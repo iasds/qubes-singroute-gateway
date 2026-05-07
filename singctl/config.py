@@ -117,47 +117,55 @@ RULE_PRESETS = {
     },
 }
 
-# DNS presets — foreign DNS: Cloudflare DoH via proxy (encrypted), CN DNS: 114.114.114.114 direct
+# DNS presets — foreign DNS: Cloudflare DoH via proxy (IP bypasses polluted DNS)
+# CN DNS: DNSPod UDP direct (119.29.29.29, no TLS needed)
 # Qubes system DNS (10.139.1.1) always included for CN domains and proxy node resolution
+#
+# Why IP instead of domain? In Qubes, default_domain_resolver uses Qubes DNS (10.139.1.1)
+# which returns polluted results. If we use "cloudflare-dns.com" as DoH server, sing-box
+# must first resolve that domain via Qubes DNS → gets wrong IP → DoH fails.
+# Using the IP directly (104.16.248.249) skips domain resolution entirely.
+CLOUDFLARE_DOH_IP = "104.16.248.249"  # cloudflare-dns.com → 104.16.248.249 / 104.16.249.249
+
 DNS_PRESETS = {
-    "google": {
-        "name": "Google DNS",
-        "desc": "经典选择，稳定可靠",
-        "servers": [
-            {"type": "https", "tag": "dns-proxy", "server": "cloudflare-dns.com", "detour": "auto"},
-            {"type": "https", "tag": "dns-direct", "server": "114.114.114.114", "detour": "direct"},
-        ]
-    },
     "cloudflare": {
         "name": "Cloudflare DNS",
-        "desc": "注重隐私，无日志，速度快",
+        "desc": "注重隐私，无日志，速度快（推荐）",
         "servers": [
-            {"type": "https", "tag": "dns-proxy", "server": "cloudflare-dns.com", "detour": "auto"},
-            {"type": "https", "tag": "dns-direct", "server": "114.114.114.114", "detour": "direct"},
+            {"type": "https", "tag": "dns-proxy", "server": CLOUDFLARE_DOH_IP, "detour": "auto"},
+            {"type": "udp", "tag": "dns-direct", "server": "119.29.29.29", "server_port": 53, "detour": "direct"},
+        ]
+    },
+    "google": {
+        "name": "Google DNS",
+        "desc": "经典选择，经 Cloudflare 中转",
+        "servers": [
+            {"type": "https", "tag": "dns-proxy", "server": CLOUDFLARE_DOH_IP, "detour": "auto"},
+            {"type": "udp", "tag": "dns-direct", "server": "119.29.29.29", "server_port": 53, "detour": "direct"},
         ]
     },
     "quad9": {
         "name": "Quad9 DNS",
         "desc": "安全优先，自动拦截恶意域名",
         "servers": [
-            {"type": "https", "tag": "dns-proxy", "server": "cloudflare-dns.com", "detour": "auto"},
-            {"type": "https", "tag": "dns-direct", "server": "114.114.114.114", "detour": "direct"},
+            {"type": "https", "tag": "dns-proxy", "server": CLOUDFLARE_DOH_IP, "detour": "auto"},
+            {"type": "udp", "tag": "dns-direct", "server": "119.29.29.29", "server_port": 53, "detour": "direct"},
         ]
     },
     "adguard": {
         "name": "AdGuard DNS",
         "desc": "隐私保护 + 广告拦截",
         "servers": [
-            {"type": "https", "tag": "dns-proxy", "server": "cloudflare-dns.com", "detour": "auto"},
-            {"type": "https", "tag": "dns-direct", "server": "114.114.114.114", "detour": "direct"},
+            {"type": "https", "tag": "dns-proxy", "server": CLOUDFLARE_DOH_IP, "detour": "auto"},
+            {"type": "udp", "tag": "dns-direct", "server": "119.29.29.29", "server_port": 53, "detour": "direct"},
         ]
     },
     "mullvad": {
         "name": "Mullvad DNS",
         "desc": "严格无日志，瑞典隐私法保护",
         "servers": [
-            {"type": "https", "tag": "dns-proxy", "server": "cloudflare-dns.com", "detour": "auto"},
-            {"type": "https", "tag": "dns-direct", "server": "114.114.114.114", "detour": "direct"},
+            {"type": "https", "tag": "dns-proxy", "server": CLOUDFLARE_DOH_IP, "detour": "auto"},
+            {"type": "udp", "tag": "dns-direct", "server": "119.29.29.29", "server_port": 53, "detour": "direct"},
         ]
     },
 }

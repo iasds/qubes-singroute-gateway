@@ -23,6 +23,9 @@ from .nodes import (
 from .subs import (
     add_subscription, remove_subscription, update_subscription,
     update_all_subscriptions
+
+# Module-level cache for speedtest results (run once at startup)
+_cached_nodes = None
 )
 from .i18n import t, get_region_name
 
@@ -57,6 +60,27 @@ def pause():
     input(f"\n  {C_DIM}{t('tui_press_enter')}{C_RESET}")
 
 
+# ─── Node cache (speedtest once at startup) ─────────────
+
+def get_nodes_cached(config, force_refresh=False):
+    """Get nodes with speedtest results, cached from startup.
+    Call with force_refresh=True to re-test (e.g. after updating subscriptions).
+    """
+    global _cached_nodes
+    if _cached_nodes is None or force_refresh:
+        nodes = parse_nodes(config)
+        if nodes:
+            print(f"\n  {C_DIM}{t('node_testing')}{C_RESET}")
+            nodes = speedtest_all(nodes)
+        _cached_nodes = nodes
+    return _cached_nodes
+
+def invalidate_node_cache():
+    """Clear cached nodes so next get_nodes_cached() re-tests."""
+    global _cached_nodes
+    _cached_nodes = None
+
+
 # ─── Main Menu ───────────────────────────────────────────
 
 def show_main():
@@ -76,7 +100,7 @@ def show_main():
         if preset:
             mode_str += f" ({RULE_PRESETS.get(preset, {}).get('name', preset)})"
 
-        nodes = parse_nodes(config)
+        nodes = get_nodes_cached(config)
         subs_data = load_subscriptions()
         sub_count = len(subs_data.get("subscriptions", []))
 
@@ -229,13 +253,12 @@ def show_global_node_select(config, prefs):
     header(f"{t('mode_global')} — {t('tui_select_node')}")
     print(f"\n  {C_DIM}{t('node_testing')}{C_RESET}")
 
-    nodes = parse_nodes(config)
+    nodes = get_nodes_cached(config)
     if not nodes:
         print(f"\n  {t('node_no_available')}")
         pause()
         return
 
-    nodes = speedtest_all(nodes)
     groups = group_by_sub(nodes)
 
     # Step 1: Select subscription
@@ -276,7 +299,7 @@ def show_nodes_menu(config):
         clear()
         header(t("menu_nodes"))
 
-        nodes = parse_nodes(config)
+        nodes = get_nodes_cached(config)
         
         sel = find_selector_outbound(config)
         if sel:
@@ -310,13 +333,8 @@ def show_all_nodes(nodes):
     """Show all nodes with speedtest"""
     clear()
     header(t("node_all_title"))
-    print(f"\n  {C_DIM}{t('node_testing')}{C_RESET}")
 
-    nodes = speedtest_all(nodes)
     groups = group_by_sub(nodes)
-
-    clear()
-    header(t("node_all_title"))
 
     for source, ns in groups:
         online = sum(1 for n in ns if n["online"])
@@ -355,15 +373,11 @@ def show_clear_nodes(config):
 def show_node_selector_by_sub(config, nodes):
     """Select node: first pick sub, then pick node"""
     clear()
-    header(t("node_switch_title"))
-    print(f"\n  {C_DIM}{t('node_testing')}{C_RESET}")
+    header(f"{t('node_switch_title')} — {t('tui_select_sub')}")
 
-    nodes = speedtest_all(nodes)
     groups = group_by_sub(nodes)
 
     # Step 1: Select subscription
-    clear()
-    header(f"{t('node_switch_title')} — {t('tui_select_sub')}")
     sub_names = []
     for source, ns in groups:
         online = sum(1 for n in ns if n["online"])
@@ -453,6 +467,7 @@ def sub_add():
     if err:
         print(f"  {C_RED}✗{C_RESET} {err}")
     else:
+        invalidate_node_cache()
         print(f"  {C_GREEN}✓{C_RESET} {t('sub_added', name=sub['name'], count=sub['node_count'])}")
     pause()
 
@@ -474,6 +489,7 @@ def sub_remove(subs):
 
     removed = remove_subscription(idx)
     if removed:
+        invalidate_node_cache()
         print(f"\n  {C_GREEN}✓{C_RESET} {t('sub_deleted', name=removed.get('name', ''))}")
     pause()
 
@@ -484,6 +500,7 @@ def sub_update_all():
     print(f"\n  {C_DIM}{t('tui_updating')}{C_RESET}")
 
     results = update_all_subscriptions()
+    invalidate_node_cache()
     print()
     for name, count, err in results:
         if err:
@@ -513,6 +530,7 @@ def sub_update_single(subs):
     if err:
         print(f"  {C_RED}✗{C_RESET} {err}")
     else:
+        invalidate_node_cache()
         print(f"  {C_GREEN}✓{C_RESET} {t('sub_updated', name=sub['name'], count=sub['node_count'])}")
     pause()
 

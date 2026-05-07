@@ -409,6 +409,19 @@ def apply_dns_preset(config, preset_key):
     if "independent_cache" not in config["dns"]:
         config["dns"]["independent_cache"] = True
 
+    # Note: default_domain_resolver stays as dns-system (Qubes DNS)
+    # This is needed for proxy node domain resolution (not polluted for proxy-specific domains)
+    # DoH server uses IP (104.16.248.249) so no domain resolution needed for that.
+    # Client DNS queries go through dns-proxy (DoH) as configured in the DNS section.
+
+    # Ensure direct outbound uses system DNS
+    for outbound in config.get("outbounds", []):
+        if outbound.get("tag") == "direct":
+            outbound["domain_resolver"] = {
+                "server": "dns-system",
+                "strategy": "prefer_ipv4"
+            }
+
     save_config(config)
     restart()
     return config

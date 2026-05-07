@@ -454,8 +454,8 @@ config = {
     'dns': {
         'servers': [
             {'type': 'udp', 'tag': 'dns-system', 'server': '10.139.1.1', 'server_port': 53, 'detour': 'direct'},
-            {'type': 'https', 'tag': 'dns-proxy', 'server': '8.8.8.8', 'detour': 'auto'},
-            {'type': 'https', 'tag': 'dns-direct', 'server': '119.29.29.29', 'detour': 'direct'}
+            {'type': 'https', 'tag': 'dns-proxy', 'server': '104.16.248.249', 'detour': 'auto'},
+            {'type': 'udp', 'tag': 'dns-direct', 'server': '119.29.29.29', 'server_port': 53, 'detour': 'direct'}
         ],
         'rules': [
             {'domain_suffix': ['.cn', 'baidu.com', 'qq.com', 'taobao.com', 'bilibili.com'], 'server': 'dns-system'}
@@ -493,7 +493,7 @@ config = {
     'dns': {
         'servers': [
             {'type': 'udp', 'tag': 'dns-system', 'server': '10.139.1.1', 'server_port': 53, 'detour': 'direct'},
-            {'type': 'https', 'tag': 'dns-proxy', 'server': '8.8.8.8', 'detour': 'auto'}
+            {'type': 'https', 'tag': 'dns-proxy', 'server': '104.16.248.249', 'detour': 'auto'}
         ],
         'rules': [],
         'strategy': 'prefer_ipv4',
