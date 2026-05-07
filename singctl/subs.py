@@ -43,7 +43,7 @@ def parse_uri_nodes(raw_data):
         line = line.strip()
         if not line:
             continue
-        m = re.match(r'^(ss|vmess|vless|trojan|hysteria2|hysteria)://', line)
+        m = re.match(r'^(ss|vmess|vless|trojan|hysteria2|hysteria|tuic|anytls)://', line)
         if m:
             proto = m.group(1)
             name = ""
@@ -247,6 +247,14 @@ def sync_nodes_to_config():
                     ob = _parse_ss_uri(uri, tag)
                 elif proto == "trojan":
                     ob = _parse_trojan_uri(uri, tag)
+                elif proto in ("hysteria2", "hysteria"):
+                    ob = _parse_hy2_uri(uri, tag)
+                elif proto == "vless":
+                    ob = _parse_vless_uri(uri, tag)
+                elif proto == "tuic":
+                    ob = _parse_tuic_uri(uri, tag)
+                elif proto == "anytls":
+                    ob = _parse_anytls_uri(uri, tag)
             
             if ob:
                 # Skip dead nodes (e.g. 127.0.0.1)
@@ -404,5 +412,287 @@ def _parse_trojan_uri(uri, tag):
                 "password": password,
                 "tls": {"enabled": True, "server_name": sni}
             }
+    except Exception:
+        return None
+
+
+def _parse_hy2_uri(uri, tag):
+    """Parse hysteria2:// URI to outbound config.
+
+    Format: hysteria2://password@server:port?sni=xxx&insecure=1#name
+    Also handles: hysteria:// (legacy alias)
+    """
+    try:
+        # Strip scheme
+        uri = re.sub(r'^hysteria2?://', '', uri)
+
+        # Extract fragment (name)
+        if "#" in uri:
+            uri, _ = uri.rsplit("#", 1)
+
+        # Split query params
+        params = {}
+        if "?" in uri:
+            uri, qs = uri.split("?", 1)
+            for p in qs.split("&"):
+                if "=" in p:
+                    k, v = p.split("=", 1)
+                    params[k] = urllib.request.unquote(v)
+
+        # password@server:port
+        if "@" not in uri:
+            return None
+        password, server_part = uri.rsplit("@", 1)
+
+        if ":" in server_part:
+            host, port = server_part.rsplit(":", 1)
+            port = int(port)
+        else:
+            host = server_part
+            port = 443
+
+        ob = {
+            "type": "hysteria2",
+            "tag": tag,
+            "server": host,
+            "server_port": port,
+            "password": password,
+        }
+
+        # TLS config
+        sni = params.get("sni") or params.get("peer") or host
+        insecure = params.get("insecure", "0") == "1"
+        ob["tls"] = {
+            "enabled": True,
+            "server_name": sni,
+            "insecure": insecure,
+        }
+
+        # Optional: obfs
+        obfs_type = params.get("obfs")
+        if obfs_type:
+            ob["obfs"] = {
+                "type": obfs_type,
+                "password": params.get("obfs-password", ""),
+            }
+
+        # Optional: pinSHA256
+        pin = params.get("pinSHA256")
+        if pin:
+            ob["tls"]["certificate_path"] = pin
+
+        return ob
+    except Exception:
+        return None
+
+
+def _parse_vless_uri(uri, tag):
+    """Parse vless:// URI to outbound config.
+
+    Format: vless://uuid@server:port?encryption=none&security=tls&sni=xxx&type=ws&path=/path&host=xxx#name
+    """
+    try:
+        # Strip scheme
+        uri = uri.replace("vless://", "")
+
+        # Extract fragment (name)
+        if "#" in uri:
+            uri, _ = uri.rsplit("#", 1)
+
+        # Split query params
+        params = {}
+        if "?" in uri:
+            uri, qs = uri.split("?", 1)
+            for p in qs.split("&"):
+                if "=" in p:
+                    k, v = p.split("=", 1)
+                    params[k] = urllib.request.unquote(v)
+
+        # uuid@server:port
+        if "@" not in uri:
+            return None
+        uuid, server_part = uri.rsplit("@", 1)
+
+        if ":" in server_part:
+            host, port = server_part.rsplit(":", 1)
+            port = int(port)
+        else:
+            host = server_part
+            port = 443
+
+        ob = {
+            "type": "vless",
+            "tag": tag,
+            "server": host,
+            "server_port": port,
+            "uuid": uuid,
+        }
+
+        # TLS
+        security = params.get("security", "none")
+        if security in ("tls", "reality"):
+            tls_cfg = {"enabled": True}
+            sni = params.get("sni") or params.get("peer") or host
+            tls_cfg["server_name"] = sni
+
+            if security == "reality":
+                tls_cfg["reality"] = {
+                    "enabled": True,
+                    "public_key": params.get("pbk", ""),
+                    "short_id": params.get("sid", ""),
+                }
+                if params.get("fp"):
+                    tls_cfg["utls"] = {
+                        "enabled": True,
+                        "fingerprint": params["fp"],
+                    }
+            ob["tls"] = tls_cfg
+
+        # Transport
+        transport_type = params.get("type", "tcp")
+        if transport_type == "ws":
+            ob["transport"] = {"type": "ws"}
+            if params.get("path"):
+                ob["transport"]["path"] = params["path"]
+            if params.get("host"):
+                ob["transport"]["headers"] = {"Host": params["host"]}
+        elif transport_type == "grpc":
+            ob["transport"] = {"type": "grpc"}
+            if params.get("serviceName"):
+                ob["transport"]["service_name"] = params["serviceName"]
+        elif transport_type == "h2":
+            ob["transport"] = {"type": "http"}
+            if params.get("path"):
+                ob["transport"]["path"] = params["path"]
+            if params.get("host"):
+                ob["transport"]["host"] = [params["host"]]
+        # tcp: no transport config needed
+
+        return ob
+    except Exception:
+        return None
+
+
+def _parse_tuic_uri(uri, tag):
+    """Parse tuic:// URI to outbound config.
+
+    Format: tuic://uuid:password@server:port?congestion_control=bbr&sni=xxx&alpn=h3#name
+    """
+    try:
+        uri = uri.replace("tuic://", "")
+
+        # Extract fragment
+        if "#" in uri:
+            uri, _ = uri.rsplit("#", 1)
+
+        # Split query params
+        params = {}
+        if "?" in uri:
+            uri, qs = uri.split("?", 1)
+            for p in qs.split("&"):
+                if "=" in p:
+                    k, v = p.split("=", 1)
+                    params[k] = urllib.request.unquote(v)
+
+        # uuid:password@server:port
+        if "@" not in uri:
+            return None
+        auth, server_part = uri.rsplit("@", 1)
+
+        if ":" in auth:
+            uuid, password = auth.split(":", 1)
+        else:
+            return None
+
+        if ":" in server_part:
+            host, port = server_part.rsplit(":", 1)
+            port = int(port)
+        else:
+            host = server_part
+            port = 443
+
+        ob = {
+            "type": "tuic",
+            "tag": tag,
+            "server": host,
+            "server_port": port,
+            "uuid": uuid,
+            "password": password,
+        }
+
+        # Congestion control
+        cc = params.get("congestion_control", "bbr")
+        ob["congestion_control"] = cc
+
+        # TLS
+        sni = params.get("sni") or host
+        alpn = params.get("alpn", "h3").split(",")
+        ob["tls"] = {
+            "enabled": True,
+            "server_name": sni,
+            "alpn": alpn,
+            "insecure": params.get("insecure", "0") == "1",
+        }
+
+        # UDP relay mode
+        relay_mode = params.get("udp_relay_mode", "native")
+        ob["udp_relay_mode"] = relay_mode
+
+        return ob
+    except Exception:
+        return None
+
+
+def _parse_anytls_uri(uri, tag):
+    """Parse anytls:// URI to outbound config.
+
+    Format: anytls://password@server:port?sni=xxx&insecure=1#name
+    Note: anytls requires sing-box 1.12+
+    """
+    try:
+        uri = uri.replace("anytls://", "")
+
+        # Extract fragment
+        if "#" in uri:
+            uri, _ = uri.rsplit("#", 1)
+
+        # Split query params
+        params = {}
+        if "?" in uri:
+            uri, qs = uri.split("?", 1)
+            for p in qs.split("&"):
+                if "=" in p:
+                    k, v = p.split("=", 1)
+                    params[k] = urllib.request.unquote(v)
+
+        # password@server:port
+        if "@" not in uri:
+            return None
+        password, server_part = uri.rsplit("@", 1)
+
+        if ":" in server_part:
+            host, port = server_part.rsplit(":", 1)
+            port = int(port)
+        else:
+            host = server_part
+            port = 443
+
+        sni = params.get("sni") or host
+        insecure = params.get("insecure", "0") == "1"
+
+        ob = {
+            "type": "anytls",
+            "tag": tag,
+            "server": host,
+            "server_port": port,
+            "password": password,
+            "tls": {
+                "enabled": True,
+                "server_name": sni,
+                "insecure": insecure,
+            },
+        }
+
+        return ob
     except Exception:
         return None
