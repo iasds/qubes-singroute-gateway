@@ -23,11 +23,11 @@ from .nodes import (
 from .subs import (
     add_subscription, remove_subscription, update_subscription,
     update_all_subscriptions
+)
+from .i18n import t, get_region_name
 
 # Module-level cache for speedtest results (run once at startup)
 _cached_nodes = None
-)
-from .i18n import t, get_region_name
 
 
 def clear():
